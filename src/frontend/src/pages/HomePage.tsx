@@ -164,7 +164,7 @@ export function HomePage({ t, lang }: HomePageProps) {
         className="relative z-10 w-full px-4 py-5 sm:px-6 lg:pointer-events-none lg:flex lg:h-full lg:max-w-[1440px] lg:items-start lg:p-5"
       >
         <div
-          className="w-full rounded-2xl p-6 lg:pointer-events-auto lg:max-h-full lg:w-[412px] lg:overflow-y-auto"
+          className="w-full rounded-2xl p-6 lg:pointer-events-auto lg:max-h-full lg:w-[436px] lg:overflow-y-auto"
           style={{
             backgroundColor: 'var(--bg-surface)',
             boxShadow: 'var(--shadow-float)',
