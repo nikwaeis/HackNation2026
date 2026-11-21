@@ -115,4 +115,13 @@
     <data name="Ent.SavedReport.EmptyPayload" xml:space="preserve">
         <value>Treść raportu nie może być pusta.</value>
     </data>
+    <data name="External.ParcelNotFound" xml:space="preserve">
+        <value>Nie znaleziono działki ewidencyjnej dla wskazanej lokalizacji.</value>
+    </data>
+    <data name="External.UldkUnavailable" xml:space="preserve">
+        <value>Usługa ULDK GUGiK jest chwilowo niedostępna. Spróbuj ponownie za chwilę.</value>
+    </data>
+    <data name="External.WeatherUnavailable" xml:space="preserve">
+        <value>Dane meteorologiczne Open-Meteo są chwilowo niedostępne. Spróbuj ponownie za chwilę.</value>
+    </data>
 </root>

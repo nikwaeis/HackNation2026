@@ -53,13 +53,8 @@ builder.Services.AddScoped<IDataSeeder, CropSeeder>();
 builder.Services.ConfigureHttpJsonOptions(o =>
     o.SerializerOptions.Converters.Add(new JsonStringEnumConverter(allowIntegerValues: false)));
 
-// Typed HttpClient for Python FastAPI microservice
-builder.Services.AddHttpClient<IPythonServiceClient, PythonServiceClient>((sp, client) =>
-{
-    var settings = sp.GetRequiredService<IOptions<PythonServiceSettings>>().Value;
-    client.BaseAddress = new Uri(settings.BaseUrl);
-    client.Timeout = TimeSpan.FromSeconds(settings.TimeoutSeconds);
-});
+// Typed HttpClients: ULDK, Open-Meteo, SoilGrids, Overpass, Python geo-worker
+builder.Services.AddExternalApiClients();
 
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {

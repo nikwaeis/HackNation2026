@@ -115,4 +115,13 @@
     <data name="Ent.SavedReport.EmptyPayload" xml:space="preserve">
         <value>Report content cannot be empty.</value>
     </data>
+    <data name="External.ParcelNotFound" xml:space="preserve">
+        <value>No cadastral parcel was found for the given location.</value>
+    </data>
+    <data name="External.UldkUnavailable" xml:space="preserve">
+        <value>The ULDK GUGiK service is temporarily unavailable. Please try again shortly.</value>
+    </data>
+    <data name="External.WeatherUnavailable" xml:space="preserve">
+        <value>Open-Meteo weather data is temporarily unavailable. Please try again shortly.</value>
+    </data>
 </root>

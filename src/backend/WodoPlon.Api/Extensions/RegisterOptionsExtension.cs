@@ -21,6 +21,11 @@ public static class RegisterOptionsExtension
             .ValidateFluently()
             .ValidateOnStart();
 
+        services.AddOptions<ExternalApisSettings>()
+            .BindConfiguration(ExternalApisSettings.SectionName)
+            .ValidateFluently()
+            .ValidateOnStart();
+
         return services;
     }
 }
