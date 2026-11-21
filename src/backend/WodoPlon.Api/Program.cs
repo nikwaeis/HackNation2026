@@ -8,6 +8,7 @@ using WodoPlon.Api.Common.Filters;
 using WodoPlon.Api.Common.Interface;
 using WodoPlon.Api.Common.Models;
 using WodoPlon.Api.Common.Options;
+using WodoPlon.Api.Common.Seeds;
 using WodoPlon.Api.Common.Services;
 using WodoPlon.Api.Data;
 using WodoPlon.Api.Extensions;
@@ -27,7 +28,8 @@ builder.Services.AddOpenApi();
 
 // Db connection
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"),
+        npgsql => npgsql.UseNetTopologySuite()));
 
 // Redis + HybridCache
 var redisOptions = ConfigurationOptions.Parse(builder.Configuration.GetRequired("Redis:ConnectionString"));
@@ -45,6 +47,7 @@ builder.Services.AddValidatorsFromAssembly(typeof(Program).Assembly);
 builder.Services.AddSingleton<IUserAgentService, UserAgentService>();
 builder.Services.AddSingleton<IRateLimitService, RedisRateLimitService>();
 builder.Services.AddLocalization();
+builder.Services.AddScoped<IDataSeeder, CropSeeder>();
 
 // enums go over the wire as names, not numbers
 builder.Services.ConfigureHttpJsonOptions(o =>

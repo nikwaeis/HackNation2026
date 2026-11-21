@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using WodoPlon.Domain.Entities;
 using WodoPlon.Domain.Results;
 
 namespace WodoPlon.Api.Data;
@@ -7,9 +8,17 @@ public class AppDbContext : DbContext
 {
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
+    public DbSet<Crop> Crops => Set<Crop>();
+    public DbSet<HydroFeature> HydroFeatures => Set<HydroFeature>();
+    public DbSet<Parcel> Parcels => Set<Parcel>();
+    public DbSet<ParcelStaticProfile> ParcelStaticProfiles => Set<ParcelStaticProfile>();
+    public DbSet<DynamicObservation> DynamicObservations => Set<DynamicObservation>();
+    public DbSet<SavedReport> SavedReports => Set<SavedReport>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         builder.HasPostgresExtension("pg_trgm");
+        builder.HasPostgresExtension("postgis");
         builder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
 
         builder.HasDbFunction(typeof(AppDbContext).GetMethod(nameof(AsText))!)
