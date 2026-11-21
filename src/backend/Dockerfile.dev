@@ -1,0 +1,9 @@
+FROM mcr.microsoft.com/dotnet/sdk:10.0
+WORKDIR /src
+# polling: inotify events don't pass through Windows/macOS bind mounts
+ENV DOTNET_USE_POLLING_FILE_WATCHER=true \
+    DOTNET_WATCH_RESTART_ON_RUDE_EDIT=true \
+    ASPNETCORE_URLS=http://+:8080
+EXPOSE 8080
+# source is bind-mounted by docker-compose.dev.yml
+CMD ["dotnet", "watch", "--project", "WodoPlon.Api/WodoPlon.Api.csproj", "run", "--no-launch-profile"]

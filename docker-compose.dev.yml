@@ -1,0 +1,67 @@
+name: wodoplon-dev
+
+services:
+  api:
+    build:
+      context: ./src/backend
+      dockerfile: Dockerfile.dev
+    env_file: .env
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__DefaultConnection: Host=postgres;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
+      Redis__ConnectionString: redis:6379
+      Database__RunSeed: ${DATABASE_RUNSEED:-false}
+    ports:
+      - "${API_PORT:-5254}:8080"
+    volumes:
+      - ./src/backend:/src
+      # keep container bin/obj separate from host build output
+      - /src/WodoPlon.Api/bin
+      - /src/WodoPlon.Api/obj
+      - /src/WodoPlon.Domain/bin
+      - /src/WodoPlon.Domain/obj
+      - nuget:/root/.nuget/packages
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  postgres:
+    image: postgres:17-alpine
+    env_file: .env
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+
+  # --- Placeholder: Python FastAPI microservice ---
+  # python-service:
+  #   build:
+  #     context: ./src/python-service
+  #     dockerfile: Dockerfile.dev
+  #   ports:
+  #     - "${PYTHON_SERVICE_PORT:-8000}:8000"
+  #   volumes:
+  #     - ./src/python-service:/app
+
+  # --- Placeholder: Frontend ---
+  # frontend:
+  #   build:
+  #     context: ./src/frontend
+  #     dockerfile: Dockerfile.dev
+  #   ports:
+  #     - "${FRONTEND_PORT:-5173}:5173"
+
+volumes:
+  pgdata:
+  nuget:

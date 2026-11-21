@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="WodoPlon.Api/WodoPlon.Api.csproj" />
+  <Project Path="WodoPlon.Domain/WodoPlon.Domain.csproj" />
+  <Project Path="WodoPlon.UnitTests/WodoPlon.UnitTests.csproj" />
+</Solution>
