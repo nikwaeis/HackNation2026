@@ -11,6 +11,9 @@ services:
       ConnectionStrings__DefaultConnection: Host=postgres;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
       Redis__ConnectionString: redis:6379
       Database__RunSeed: ${DATABASE_RUNSEED:-false}
+      # appsettings.Development.json points at localhost:8000 (API run on the host);
+      # inside compose the geo-worker is reachable by its service name.
+      PythonService__BaseUrl: http://python-service:8000
     ports:
       - "${API_PORT:-5254}:8080"
     volumes:
@@ -25,6 +28,8 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_started
+      python-service:
         condition: service_started
 
   postgres:
@@ -44,15 +49,15 @@ services:
     ports:
       - "${REDIS_PORT:-6379}:6379"
 
-  # --- Placeholder: Python FastAPI microservice ---
-  # python-service:
-  #   build:
-  #     context: ./src/python-service
-  #     dockerfile: Dockerfile.dev
-  #   ports:
-  #     - "${PYTHON_SERVICE_PORT:-8000}:8000"
-  #   volumes:
-  #     - ./src/python-service:/app
+  # Python FastAPI geo-worker (GUGiK NMT + Sentinel-2). Name must match PythonService__BaseUrl.
+  python-service:
+    build:
+      context: ./src/python-service
+      dockerfile: Dockerfile.dev
+    ports:
+      - "${PYTHON_SERVICE_PORT:-8000}:8000"
+    volumes:
+      - ./src/python-service:/app
 
   # --- Placeholder: Frontend ---
   # frontend:
