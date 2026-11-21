@@ -94,10 +94,6 @@ namespace WodoPlon.Api.Data.Migrations
                         .HasColumnType("timestamptz")
                         .HasColumnName("fetched_at");
 
-                    b.Property<int?>("HistoricalDroughtYears")
-                        .HasColumnType("integer")
-                        .HasColumnName("historical_drought_years");
-
                     b.Property<decimal?>("NdviMean")
                         .HasPrecision(5, 4)
                         .HasColumnType("numeric(5,4)")
@@ -142,6 +138,11 @@ namespace WodoPlon.Api.Data.Migrations
                     b.Property<DateOnly>("TargetDate")
                         .HasColumnType("date")
                         .HasColumnName("target_date");
+
+                    b.Property<string>("WindowMonths")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("window_months");
 
                     b.HasKey("Id");
 

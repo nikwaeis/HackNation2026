@@ -97,8 +97,8 @@
     <data name="Ent.DynamicObservation.NegativeValue" xml:space="preserve">
         <value>Weather values cannot be negative.</value>
     </data>
-    <data name="Ent.DynamicObservation.DroughtYearsOutOfRange" xml:space="preserve">
-        <value>Drought years must be between {0} and {1}.</value>
+    <data name="Ent.DynamicObservation.InvalidWeatherMonth" xml:space="preserve">
+        <value>Monthly weather data is invalid: years back must be from {0} to {1}, month from 1 to 12.</value>
     </data>
     <data name="Ent.DynamicObservation.IndexOutOfRange" xml:space="preserve">
         <value>Satellite index must be between {0} and {1}.</value>

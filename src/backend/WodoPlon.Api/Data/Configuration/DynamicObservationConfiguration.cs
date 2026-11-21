@@ -1,4 +1,6 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using WodoPlon.Domain.Entities;
 using WodoPlon.Domain.ValueObjects;
@@ -37,7 +39,18 @@ public class DynamicObservationConfiguration : IEntityTypeConfiguration<DynamicO
         builder.Property(o => o.Precip10yrAvg90dMm).HasColumnName("precip_10yr_avg_90d_mm").HasPrecision(7, 2);
         builder.Property(o => o.Et090dMm).HasColumnName("et0_90d_mm").HasPrecision(7, 2);
         builder.Property(o => o.DrySpellDays).HasColumnName("dry_spell_days");
-        builder.Property(o => o.HistoricalDroughtYears).HasColumnName("historical_drought_years");
+
+        builder.Property(o => o.WindowMonths)
+            .HasColumnName("window_months")
+            .HasColumnType("jsonb")
+            .HasConversion(
+                months => JsonSerializer.Serialize(months, JsonSerializerOptions.Default),
+                json => JsonSerializer.Deserialize<WeatherMonth[]>(json, JsonSerializerOptions.Default) ?? Array.Empty<WeatherMonth>(),
+                new ValueComparer<IReadOnlyList<WeatherMonth>>(
+                    (a, b) => a!.SequenceEqual(b!),
+                    months => months.Aggregate(0, (hash, m) => HashCode.Combine(hash, m)),
+                    months => months.ToArray()))
+            .IsRequired();
 
         builder.Property(o => o.NdviMean).HasColumnName("ndvi_mean").HasPrecision(5, 4);
         builder.Property(o => o.NdwiMean).HasColumnName("ndwi_mean").HasPrecision(5, 4);

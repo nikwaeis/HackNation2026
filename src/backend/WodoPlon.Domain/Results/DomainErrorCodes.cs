@@ -82,7 +82,7 @@ public static class DomainErrorCodes
             public const string CurrentIdentity = nameof(DynamicObservation);
 
             public const string NegativeValue = $"{LocalIdentity}.{CurrentIdentity}.{nameof(NegativeValue)}";
-            public const string DroughtYearsOutOfRange = $"{LocalIdentity}.{CurrentIdentity}.{nameof(DroughtYearsOutOfRange)}";
+            public const string InvalidWeatherMonth = $"{LocalIdentity}.{CurrentIdentity}.{nameof(InvalidWeatherMonth)}";
             public const string IndexOutOfRange = $"{LocalIdentity}.{CurrentIdentity}.{nameof(IndexOutOfRange)}";
             public const string MissingSatelliteData = $"{LocalIdentity}.{CurrentIdentity}.{nameof(MissingSatelliteData)}";
             public const string UnexpectedSatelliteData = $"{LocalIdentity}.{CurrentIdentity}.{nameof(UnexpectedSatelliteData)}";

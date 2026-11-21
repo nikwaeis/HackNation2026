@@ -111,6 +111,13 @@ public sealed class ParcelStaticProfile
         return Result.Success();
     }
 
+    /// <summary> Fills relief later than soil and water: it comes from the geo-worker together with satellite data </summary>
+    public Result UpdateRelief(ReliefData relief, DateTimeOffset fetchedAt) =>
+        Refresh(relief,
+            new SoilData(SandPct?.Value, ClayPct?.Value, SiltPct?.Value, OrganicCarbonGKg, AwcMmPerM, SoilDroughtVulnerability),
+            new WaterData(NearestWaterDistM, NearestWaterType),
+            fetchedAt);
+
     /// <summary> Large steep share means rain runs off instead of soaking in </summary>
     public bool HasRunoffRisk => SteepAreaPct?.Value > RunoffRiskSteepPct;
 

@@ -39,8 +39,11 @@ public sealed class DynamicObservation
     /// <summary> Longest run of days with precipitation below 1 mm </summary>
     public int? DrySpellDays { get; private set; }
 
-    /// <summary> How many of the last 10 years had a deficit in this period </summary>
-    public int? HistoricalDroughtYears { get; private set; }
+    /// <summary>
+    /// P and ET0 per calendar month inside the 90-day window, for this year and each of the 10 previous ones.
+    /// Kc depends only on the month, so crop water need is computed from these for any crop without refetching
+    /// </summary>
+    public IReadOnlyList<WeatherMonth> WindowMonths { get; private set; } = [];
 
     #endregion
 
@@ -80,8 +83,10 @@ public sealed class DynamicObservation
         if (new[] { meteo.Precip30dMm, meteo.Precip90dMm, meteo.Precip10yrAvg90dMm, meteo.Et090dMm }.Any(v => v < 0)
             || meteo.DrySpellDays < 0)
             return ResultError.Validation(DomainErrorCodes.Entities.DynamicObservation.NegativeValue);
-        if (meteo.HistoricalDroughtYears is < 0 or > HistoryYears)
-            return ResultError.Validation(DomainErrorCodes.Entities.DynamicObservation.DroughtYearsOutOfRange, 0, HistoryYears);
+        if (meteo.WindowMonths.Any(m => m.PrecipMm < 0 || m.Et0Mm < 0))
+            return ResultError.Validation(DomainErrorCodes.Entities.DynamicObservation.NegativeValue);
+        if (meteo.WindowMonths.Any(m => m.YearsBack is < 0 or > HistoryYears || m.Month is < 1 or > 12))
+            return ResultError.Validation(DomainErrorCodes.Entities.DynamicObservation.InvalidWeatherMonth, 0, HistoryYears);
 
         var observation = new DynamicObservation
         {
@@ -92,7 +97,7 @@ public sealed class DynamicObservation
             Precip10yrAvg90dMm = meteo.Precip10yrAvg90dMm,
             Et090dMm = meteo.Et090dMm,
             DrySpellDays = meteo.DrySpellDays,
-            HistoricalDroughtYears = meteo.HistoricalDroughtYears,
+            WindowMonths = meteo.WindowMonths,
             FetchedAt = fetchedAt
         };
 
@@ -151,7 +156,10 @@ public sealed class DynamicObservation
 
 /// <summary> Open-Meteo aggregates </summary>
 public sealed record MeteoData(decimal? Precip30dMm, decimal? Precip90dMm, decimal? Precip10yrAvg90dMm,
-    decimal? Et090dMm, int? DrySpellDays, int? HistoricalDroughtYears);
+    decimal? Et090dMm, int? DrySpellDays, IReadOnlyList<WeatherMonth> WindowMonths);
+
+/// <summary> Sums for one calendar month inside a 90-day window; YearsBack 0 = target year </summary>
+public sealed record WeatherMonth(int YearsBack, int Month, decimal PrecipMm, decimal Et0Mm);
 
 /// <summary> Sentinel-2 L2A result from the Python worker </summary>
 public sealed record SatelliteData(SatelliteStatus Status, decimal? NdviMean = null, decimal? NdwiMean = null,

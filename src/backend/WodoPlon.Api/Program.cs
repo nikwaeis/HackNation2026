@@ -50,6 +50,7 @@ builder.Services.AddSingleton<IRateLimitService, RedisRateLimitService>();
 builder.Services.AddLocalization();
 builder.Services.AddScoped<IDataSeeder, CropSeeder>();
 builder.Services.AddScoped<ParcelProfileService>();
+builder.Services.AddScoped<ObservationService>();
 
 // enums go over the wire as names, not numbers
 builder.Services.ConfigureHttpJsonOptions(o =>

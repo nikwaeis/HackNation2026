@@ -97,8 +97,8 @@
     <data name="Ent.DynamicObservation.NegativeValue" xml:space="preserve">
         <value>Wartości pogodowe nie mogą być ujemne.</value>
     </data>
-    <data name="Ent.DynamicObservation.DroughtYearsOutOfRange" xml:space="preserve">
-        <value>Liczba lat suszy musi mieścić się w zakresie od {0} do {1}.</value>
+    <data name="Ent.DynamicObservation.InvalidWeatherMonth" xml:space="preserve">
+        <value>Miesięczne dane pogodowe są nieprawidłowe: lata wstecz od {0} do {1}, miesiąc od 1 do 12.</value>
     </data>
     <data name="Ent.DynamicObservation.IndexOutOfRange" xml:space="preserve">
         <value>Indeks satelitarny musi mieścić się w zakresie od {0} do {1}.</value>

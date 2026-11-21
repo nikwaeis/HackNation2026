@@ -22,7 +22,7 @@ public class EntityTests
         return new MultiPolygon([polygon], polygon.Factory);
     }
 
-    private static readonly MeteoData Meteo = new(20m, 90m, 150m, 300m, 12, 4);
+    private static readonly MeteoData Meteo = new(20m, 90m, 150m, 300m, 12, [new WeatherMonth(0, 6, 90m, 300m)]);
 
     [Theory]
     [InlineData("040101_1.0001.123/4", true)]
