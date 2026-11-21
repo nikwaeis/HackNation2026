@@ -17,6 +17,7 @@ import {
 import {
   AlertCircle,
   ChevronDown,
+  Info,
   CloudRain,
   Grid2x2,
   Layers,
@@ -420,6 +421,8 @@ export function ParcelMap({
   const mapRef = useRef<L.Map | null>(null);
   /** phones only: the legend is a collapsible chip (always open from the sm breakpoint) */
   const [legendOpen, setLegendOpen] = useState(false);
+  /** phones only: map data credits (OSM / GUGiK / Copernicus) sit behind an "i" button */
+  const [attrOpen, setAttrOpen] = useState(false);
 
   /* ---- Copernicus EDO drought layer: dekad-aligned TIME + tile status for the legend ---- */
   // undefined = capabilities not fetched yet; null = unknown (service did not answer)
@@ -586,9 +589,9 @@ export function ParcelMap({
 
   return (
     <div
-      className={`relative isolate z-0 w-full overflow-hidden ${reserveTopRight ? 'map-reserve-top-right' : ''} ${
+      className={`map-attr-collapsible relative isolate z-0 w-full overflow-hidden ${reserveTopRight ? 'map-reserve-top-right' : ''} ${
         interactive ? 'map-pickable' : ''
-      } ${className}`}
+      } ${attrOpen ? 'attr-open' : ''} ${className}`}
       style={{ backgroundColor: 'var(--map-bg)' }}
     >
       <HatchDefs />
@@ -989,6 +992,18 @@ export function ParcelMap({
           )}
         </div>
       )}
+
+      {/* Phones: map data credits collapsed behind an "i" button (licences still require them on demand) */}
+      <button
+        type="button"
+        onClick={() => setAttrOpen((v) => !v)}
+        aria-expanded={attrOpen}
+        aria-label={t.mapSources}
+        title={t.mapSources}
+        className="glass-pill no-print absolute bottom-[66px] left-3 z-[401] flex h-9 w-9 items-center justify-center sm:hidden"
+      >
+        <Info className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+      </button>
 
       {/* Floating layer dock */}
       <div className={`no-print absolute bottom-3 left-3 right-3 z-[400] flex items-center sm:bottom-5 sm:left-4 sm:right-4 lg:right-auto ${overlayOffsetClass}`}>

@@ -34,6 +34,16 @@ test('home on a phone: big map, compact controls, nothing sticks out', async ({ 
 
   // theme toggle has an accessible name even without its text label
   await expect(page.getByRole('button', { name: 'Kontrast' })).toBeVisible();
+
+  // map credits are tucked behind an "i" button, shown on demand (licences require them)
+  const credits = page.locator('.leaflet-control-attribution');
+  await expect(credits).toBeHidden();
+  await page.getByRole('button', { name: 'Źródła danych mapy' }).tap();
+  await expect(credits).toBeVisible();
+  await expect(credits).toContainText('Geoportal');
+  await insideViewport(credits, 'map credits');
+  await page.getByRole('button', { name: 'Źródła danych mapy' }).tap();
+  await expect(credits).toBeHidden();
 });
 
 test('tap on a field selects it; the legend is a collapsible chip', async ({ page }) => {
