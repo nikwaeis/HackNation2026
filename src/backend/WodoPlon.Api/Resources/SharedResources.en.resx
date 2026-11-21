@@ -124,4 +124,25 @@
     <data name="External.WeatherUnavailable" xml:space="preserve">
         <value>Open-Meteo weather data is temporarily unavailable. Please try again shortly.</value>
     </data>
+    <data name="Analysis.LocationRequired" xml:space="preserve">
+        <value>Provide a cadastral parcel id or pick a point on the map.</value>
+    </data>
+    <data name="Analysis.LatitudeOutOfRange" xml:space="preserve">
+        <value>Latitude must be between -90 and 90.</value>
+    </data>
+    <data name="Analysis.LongitudeOutOfRange" xml:space="preserve">
+        <value>Longitude must be between -180 and 180.</value>
+    </data>
+    <data name="Analysis.CropRequired" xml:space="preserve">
+        <value>Choose a crop.</value>
+    </data>
+    <data name="Analysis.CropNotFound" xml:space="preserve">
+        <value>The selected crop was not found.</value>
+    </data>
+    <data name="Analysis.TargetDateOutOfRange" xml:space="preserve">
+        <value>The analysis date must be within the last 10 years and not in the future.</value>
+    </data>
+    <data name="Analysis.ReportNotFound" xml:space="preserve">
+        <value>Report not found.</value>
+    </data>
 </root>

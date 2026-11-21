@@ -124,4 +124,25 @@
     <data name="External.WeatherUnavailable" xml:space="preserve">
         <value>Dane meteorologiczne Open-Meteo są chwilowo niedostępne. Spróbuj ponownie za chwilę.</value>
     </data>
+    <data name="Analysis.LocationRequired" xml:space="preserve">
+        <value>Podaj numer działki ewidencyjnej albo wskaż punkt na mapie.</value>
+    </data>
+    <data name="Analysis.LatitudeOutOfRange" xml:space="preserve">
+        <value>Szerokość geograficzna musi mieścić się w zakresie od -90 do 90.</value>
+    </data>
+    <data name="Analysis.LongitudeOutOfRange" xml:space="preserve">
+        <value>Długość geograficzna musi mieścić się w zakresie od -180 do 180.</value>
+    </data>
+    <data name="Analysis.CropRequired" xml:space="preserve">
+        <value>Wybierz uprawę.</value>
+    </data>
+    <data name="Analysis.CropNotFound" xml:space="preserve">
+        <value>Nie znaleziono wybranej uprawy.</value>
+    </data>
+    <data name="Analysis.TargetDateOutOfRange" xml:space="preserve">
+        <value>Data analizy musi przypadać w ciągu ostatnich 10 lat i nie może być z przyszłości.</value>
+    </data>
+    <data name="Analysis.ReportNotFound" xml:space="preserve">
+        <value>Nie znaleziono raportu.</value>
+    </data>
 </root>

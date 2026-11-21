@@ -1,4 +1,3 @@
-using System.Text.Json.Serialization;
 using FluentValidation;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
@@ -12,7 +11,9 @@ using WodoPlon.Api.Common.Seeds;
 using WodoPlon.Api.Common.Services;
 using WodoPlon.Api.Data;
 using WodoPlon.Api.Extensions;
+using WodoPlon.Api.Features.Analysis;
 using WodoPlon.Api.Features.Analysis.Shared;
+using WodoPlon.Api.Features.Crops;
 using WodoPlon.Api.Features.Health;
 using WodoPlon.Api.Middleware;
 
@@ -52,9 +53,8 @@ builder.Services.AddScoped<IDataSeeder, CropSeeder>();
 builder.Services.AddScoped<ParcelProfileService>();
 builder.Services.AddScoped<ObservationService>();
 
-// enums go over the wire as names, not numbers
-builder.Services.ConfigureHttpJsonOptions(o =>
-    o.SerializerOptions.Converters.Add(new JsonStringEnumConverter(allowIntegerValues: false)));
+// enums go over the wire as "HIGH" / "NO_DATA", geometries as GeoJSON
+builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.AddApiConverters());
 
 // Typed HttpClients: ULDK, Open-Meteo, SoilGrids, Overpass, Python geo-worker
 builder.Services.AddExternalApiClients();
@@ -116,5 +116,7 @@ var api = app.MapGroup("/api")
     .AddEndpointFilter<RateLimitFilter>();
 
 api.MapHealth();
+api.MapCrops();
+api.MapAnalysis();
 
 app.Run();
