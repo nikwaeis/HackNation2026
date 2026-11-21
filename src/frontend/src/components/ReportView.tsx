@@ -11,6 +11,7 @@ import {
   Database,
   Droplets,
   FileDown,
+  Gauge,
   History,
   Info,
   Leaf,
@@ -30,6 +31,7 @@ import {
 import type { AnalysisResponse, RetentionMeasure, WaterDeficitLevel } from '../types/api';
 import { CROP_NAMES_EN, type Language, type TranslationDict } from '../i18n/translations';
 import { ParcelMap } from './ParcelMap';
+import { assessConfidence, type ConfidenceLevel } from '../lib/confidence';
 
 interface ReportViewProps {
   t: TranslationDict;
@@ -233,6 +235,21 @@ export function ReportView({ t, lang, report, isDemo = false, onBack }: ReportVi
     : Math.max(0, Math.min(10, metrics.historicalDroughtYears));
 
   const measures = step2_causesAndRetention.retentionRecommendationsPl;
+  // KOWR sequence: landscape retention first, then agronomic (soil) measures; keep the API order index for priority
+  const measureGroups = (['LANDSCAPE', 'SOIL'] as const)
+    .map((type) => ({
+      type,
+      items: measures.map((m, idx) => ({ m, idx })).filter(({ m }) => (type === 'LANDSCAPE' ? m.type === 'LANDSCAPE' : m.type !== 'LANDSCAPE')),
+    }))
+    .filter((g) => g.items.length > 0);
+
+  const confidence = assessConfidence(report);
+  const confidenceStyle: Record<ConfidenceLevel, { bg: string; ink: string }> = {
+    high: { bg: 'var(--risk-low-soft)', ink: 'var(--risk-low-ink)' },
+    medium: { bg: 'var(--risk-moderate-soft)', ink: 'var(--risk-moderate-ink)' },
+    low: { bg: 'var(--risk-high-soft)', ink: 'var(--risk-high-ink)' },
+  };
+  const confidenceLabel = t.confidenceLevels[confidence.level];
 
   async function handleCopyLink() {
     const shareUrl = isDemo ? window.location.href : `${window.location.origin}/report/${report.reportUuid}`;
@@ -416,6 +433,20 @@ export function ReportView({ t, lang, report, isDemo = false, onBack }: ReportVi
                 ))}
               </div>
             </div>
+
+            <a
+              href="#confidence"
+              data-testid="confidence-chip"
+              className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg px-3 py-2 text-xs no-underline"
+              style={{ backgroundColor: confidenceStyle[confidence.level].bg, color: 'var(--ink-primary)' }}
+            >
+              <Gauge className="h-3.5 w-3.5 shrink-0" style={{ color: confidenceStyle[confidence.level].ink }} aria-hidden="true" />
+              <span className="font-semibold">{t.confidenceTitle}:</span>
+              <strong style={{ color: confidenceStyle[confidence.level].ink }}>{confidenceLabel}</strong>
+              <span style={{ color: 'var(--ink-secondary)' }}>
+                {confidence.reasons.length > 0 ? `— ${t.confidenceReasons[confidence.reasons[0]]}` : `— ${t.confidenceAllData}`}
+              </span>
+            </a>
 
             <p className="mt-4 text-[0.95rem] leading-relaxed" style={{ color: 'var(--ink-primary)' }}>
               {step1_diagnosis.summaryPl}
@@ -626,8 +657,21 @@ export function ReportView({ t, lang, report, isDemo = false, onBack }: ReportVi
                 {t.noMeasures}
               </p>
             ) : (
-              <ol className="mt-3 flex flex-col gap-2.5">
-                {measures.map((m, idx) => {
+              measureGroups.map((group) => (
+              <div key={group.type} className="mt-4">
+                <h4
+                  className="flex items-center gap-2 text-[0.72rem] font-bold uppercase tracking-wider"
+                  style={{ color: group.type === 'LANDSCAPE' ? 'var(--water-accent)' : 'var(--brand-primary)' }}
+                >
+                  {group.type === 'LANDSCAPE' ? (
+                    <Waves className="h-3.5 w-3.5" aria-hidden="true" />
+                  ) : (
+                    <Sprout className="h-3.5 w-3.5" aria-hidden="true" />
+                  )}
+                  {group.type === 'LANDSCAPE' ? t.retentionGroupLandscape : t.retentionGroupSoil}
+                </h4>
+              <ol className="mt-2 flex flex-col gap-2.5">
+                {group.items.map(({ m, idx }) => {
                   const priority = priorityFor(idx, level);
                   const ps = PRIORITY_STYLE[priority];
                   const Icon = measureIcon(m);
@@ -671,6 +715,8 @@ export function ReportView({ t, lang, report, isDemo = false, onBack }: ReportVi
                   );
                 })}
               </ol>
+              </div>
+              ))
             )}
             <p className="mt-2.5 text-[0.7rem]" style={{ color: 'var(--ink-muted)' }}>
               {t.priorityNote}
@@ -735,6 +781,36 @@ export function ReportView({ t, lang, report, isDemo = false, onBack }: ReportVi
 
           {/* STEP 4 — sources, dates and limitations */}
           <StepSection number={4} t={t} id="step-4" title={t.step4Title} lead={t.step4Lead}>
+            <div
+              id="confidence"
+              data-testid="confidence-box"
+              data-level={confidence.level}
+              className="mb-3 rounded-xl px-3.5 py-3"
+              style={{ backgroundColor: confidenceStyle[confidence.level].bg }}
+            >
+              <h3 className="flex items-center gap-2 text-sm font-bold" style={{ color: 'var(--ink-primary)' }}>
+                <Gauge className="h-4 w-4" style={{ color: confidenceStyle[confidence.level].ink }} aria-hidden="true" />
+                {t.confidenceTitle}: <span style={{ color: confidenceStyle[confidence.level].ink }}>{confidenceLabel}</span>
+                <span className="num ml-auto text-xs font-semibold" style={{ color: 'var(--ink-secondary)' }}>
+                  {Math.round(confidence.score * 100)}% {t.confidenceInputs}
+                </span>
+              </h3>
+              <p className="mt-1 text-xs leading-relaxed" style={{ color: 'var(--ink-secondary)' }}>
+                {t.confidenceExplain}
+              </p>
+              {confidence.reasons.length > 0 ? (
+                <ul className="mt-2 list-disc space-y-1 pl-5 text-[0.8rem] leading-relaxed" style={{ color: 'var(--ink-primary)' }}>
+                  {confidence.reasons.map((r) => (
+                    <li key={r}>{t.confidenceReasons[r]}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-2 text-[0.8rem]" style={{ color: 'var(--ink-primary)' }}>
+                  {t.confidenceAllData}
+                </p>
+              )}
+            </div>
+
             {satelliteWarning && (
               <div role="note" className="mb-3 flex items-start gap-3 rounded-xl px-3.5 py-3 text-sm" style={{ backgroundColor: 'var(--risk-moderate-soft)' }}>
                 <CloudOff className="mt-0.5 h-5 w-5 shrink-0" style={{ color: 'var(--risk-moderate-ink)' }} strokeWidth={1.9} aria-hidden="true" />

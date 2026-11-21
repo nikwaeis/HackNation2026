@@ -17,7 +17,15 @@ const KIEG_URL = 'https://integracja.gugik.gov.pl/cgi-bin/KrajowaIntegracjaEwide
 /** Short budget: the check must never hold up the farmer */
 const CHECK_TIMEOUT_MS = 2_500;
 
-export type TerritoryReason = 'builtUp' | 'farmyard' | 'forest' | 'water' | 'road' | 'wasteland' | 'notFarmland';
+export type TerritoryReason =
+  | 'builtUp'
+  | 'farmyard'
+  | 'forest'
+  | 'water'
+  | 'road'
+  | 'wasteland'
+  | 'notFarmland'
+  | 'urbanArea';
 
 export type FieldKind = 'arable' | 'meadow' | 'pasture' | 'orchard' | 'farmland';
 
@@ -25,7 +33,7 @@ export type TerritoryVerdict =
   /** farm land (EGiB class R/Ł/Ps/S or OSM farmland) — or nothing suggests otherwise */
   | { kind: 'field'; source: 'egib' | 'osm'; field: FieldKind; code?: string }
   /** built-up or non-agricultural land — warn, let the farmer pick again or confirm */
-  | { kind: 'warn'; reason: TerritoryReason; source: 'egib' | 'osm'; code?: string }
+  | { kind: 'warn'; reason: TerritoryReason; source: 'egib' | 'osm' | 'teryt'; code?: string }
   /** no source answered in time — keep the ULDK result, add a short note */
   | { kind: 'unverified' };
 
@@ -71,8 +79,27 @@ export function classifyEgib(code: string): TerritoryReason | FieldKind | null {
   return null;
 }
 
-/** KIEG GetFeatureInfo (text/xml) → land-use symbol at the point, e.g. "RIVa" / "B" */
-async function fetchEgibClass(lat: number, lon: number, signal: AbortSignal): Promise<string | null> {
+/*
+ * TERYT gmina type = the digit after "_" in a parcel id ("146510_8.0502.1/3"):
+ * 1 urban gmina, 8 Warsaw district, 9 city delegation (delegatura) -> city land. Used only as a last
+ * fallback when the register publishes no land-use class (e.g. Warsaw) and OSM has nothing either.
+ * Type 4 (town within an urban-rural gmina) is NOT treated as urban: small towns contain real fields
+ * (e.g. Lubowidz 143703_4.* has arable RV parcels).
+ */
+const URBAN_GMINA_TYPES = new Set(['1', '8', '9']);
+
+export function isUrbanTeryt(parcelId: string | null | undefined): boolean {
+  const m = /^\d{6}_(\d)\./.exec((parcelId ?? '').trim());
+  return Boolean(m && URBAN_GMINA_TYPES.has(m[1]));
+}
+
+interface EgibAnswer {
+  code: string | null;
+  parcelId: string | null;
+}
+
+/** KIEG GetFeatureInfo (text/xml) → land-use symbol at the point, e.g. "RIVa" / "B", and the parcel id */
+async function fetchEgibClass(lat: number, lon: number, signal: AbortSignal): Promise<EgibAnswer> {
   const d = 0.0005;
   // WMS 1.3.0 + EPSG:4326 → axis order lat,lon; the clicked point is the centre pixel (50, 50)
   const params = new URLSearchParams({
@@ -98,13 +125,18 @@ async function fetchEgibClass(lat: number, lon: number, signal: AbortSignal): Pr
     return m ? m[1].trim() : '';
   };
   // the contour (klasoużytek) is the most specific; some counties only fill one of the two
-  return attr('Oznaczenie konturu') || attr('Oznaczenie użytku') || null;
+  return {
+    code: attr('Oznaczenie konturu') || attr('Oznaczenie użytku') || null,
+    parcelId: attr('Identyfikator działki') || null,
+  };
 }
 
 export async function assessTerritory(
   point: { lat: number; lon: number },
   viewFields: FieldArea[] | null,
   signal: AbortSignal,
+  /** id of the parcel found by ULDK (for the TERYT urban fallback) */
+  parcelId?: string | null,
 ): Promise<TerritoryVerdict> {
   const ctrl = new AbortController();
   const timer = window.setTimeout(() => ctrl.abort(), CHECK_TIMEOUT_MS);
@@ -112,8 +144,9 @@ export async function assessTerritory(
   signal.addEventListener('abort', onAbort, { once: true });
 
   let code: string | null = null;
+  let registerParcelId: string | null = null;
   try {
-    code = await fetchEgibClass(point.lat, point.lon, ctrl.signal);
+    ({ code, parcelId: registerParcelId } = await fetchEgibClass(point.lat, point.lon, ctrl.signal));
   } catch (err) {
     if (signal.aborted) throw err;
     // timeout / network → fall through to the OSM fallback
@@ -146,6 +179,11 @@ export async function assessTerritory(
     return pointInFields(point.lat, point.lon, viewFields)
       ? { kind: 'field', source: 'osm', field: 'farmland' }
       : { kind: 'warn', reason: 'notFarmland', source: 'osm' };
+  }
+
+  // No class and no OSM data: a city parcel (TERYT gmina type 1 / 8 / 9) is very likely built-up land
+  if (isUrbanTeryt(parcelId ?? registerParcelId)) {
+    return { kind: 'warn', reason: 'urbanArea', source: 'teryt' };
   }
 
   // Land type unknown (no class in the register, no OSM data, or no answer in time): don't block, just note it

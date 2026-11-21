@@ -140,7 +140,8 @@ function TerritoryNote({
     );
   }
 
-  const sourceLabel = (source: 'egib' | 'osm') => (source === 'egib' ? t.territorySourceEgib : t.territorySourceOsm);
+  const sourceLabel = (source: 'egib' | 'osm' | 'teryt') =>
+    source === 'egib' ? t.territorySourceEgib : source === 'osm' ? t.territorySourceOsm : t.territorySourceTeryt;
 
   if (v.kind === 'field') {
     return (
@@ -178,6 +179,9 @@ function TerritoryNote({
           </>
         )}{' '}
         ({sourceLabel(v.source)})
+      </p>
+      <p className="mt-1 pl-6 text-xs leading-relaxed" style={{ color: 'var(--warn-ink-2)' }}>
+        {t.territoryScope}
       </p>
       <div className="mt-2.5 flex flex-wrap gap-2 pl-6">
         <button type="button" onClick={onPickOther} className="chip" style={{ borderColor: 'var(--warn-border)', color: 'var(--warn-ink)' }}>

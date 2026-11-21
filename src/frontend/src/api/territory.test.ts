@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { assessTerritory, classifyEgib } from './territory';
+import { assessTerritory, classifyEgib, isUrbanTeryt } from './territory';
 import type { FieldArea } from './mapContext';
 import { HOUSE_PLOT, hangingResponse, kiegXml, routedFetch } from '../test/fixtures';
 
@@ -112,6 +112,47 @@ describe('assessTerritory', () => {
       expect(await assessTerritory({ lat: 52.05, lon: 18.05 }, fields, signal())).toMatchObject({
         kind: 'warn',
         reason: 'notFarmland',
+      });
+    });
+  });
+
+  describe('TERYT urban fallback (E2E TC-03: Warsaw centre has no EGiB class)', () => {
+    it.each([
+      ['146510_8.0502.1/3', true], // Warszawa, Dzielnica Śródmieście
+      ['126101_1.0001.12', true], // urban gmina
+      ['066201_9.0001.5', true], // delegatura
+      ['143703_4.0001.1251', false], // town in an urban-rural gmina — has real fields
+      ['141611_2.0018.103', false], // rural gmina
+      ['', false],
+    ])('isUrbanTeryt(%j) = %s', (id, urban) => {
+      expect(isUrbanTeryt(id)).toBe(urban);
+    });
+
+    it('Warsaw centre: no class, no OSM data → warning "urbanArea" instead of a silent pass', async () => {
+      vi.stubGlobal('fetch', routedFetch([[() => true, () => new Response(kiegXml({ id: '146510_8.0502.1/3' }))]]).fn);
+      expect(await assessTerritory({ lat: 52.2297, lon: 21.0122 }, null, signal(), '146510_8.0502.1/3')).toEqual({
+        kind: 'warn',
+        reason: 'urbanArea',
+        source: 'teryt',
+      });
+    });
+
+    it('uses the parcel id from the register answer when the caller has none', async () => {
+      vi.stubGlobal('fetch', routedFetch([[() => true, () => new Response(kiegXml({ id: '146510_8.0502.1/3' }))]]).fn);
+      expect(await assessTerritory({ lat: 52.2297, lon: 21.0122 }, null, signal())).toMatchObject({ reason: 'urbanArea' });
+    });
+
+    it('a rural parcel without class stays "unverified"', async () => {
+      vi.stubGlobal('fetch', routedFetch([[() => true, () => new Response(kiegXml({ id: '141611_2.0018.103' }))]]).fn);
+      expect(await assessTerritory({ lat: 52.7625, lon: 22.1268 }, null, signal(), '141611_2.0018.103')).toEqual({
+        kind: 'unverified',
+      });
+    });
+
+    it('the register class still wins over the TERYT guess (arable land inside a city)', async () => {
+      vi.stubGlobal('fetch', routedFetch([[() => true, () => new Response(kiegXml({ kontur: 'RIVa' }))]]).fn);
+      expect(await assessTerritory({ lat: 52.2, lon: 21.0 }, null, signal(), '146510_8.0502.1/3')).toMatchObject({
+        kind: 'field',
       });
     });
   });

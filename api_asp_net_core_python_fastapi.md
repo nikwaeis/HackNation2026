@@ -40,7 +40,7 @@
 **Request Body:**
 ```json
 {
-  "dzialkaId": "040101_1.0001.123/4",
+  "dzialkaId": "141611_2.0018.103",
   "lat": null,
   "lon": null,
   "cropId": "winter_wheat",
@@ -54,7 +54,7 @@
 {
   "reportUuid": "550e8400-e29b-41d4-a716-446655440000",
   "meta": {
-    "dzialkaId": "040101_1.0001.123/4",
+    "dzialkaId": "141611_2.0018.103",
     "voivodeship": "kujawsko-pomorskie",
     "areaHa": 4.85,
     "cropId": "winter_wheat",
@@ -158,7 +158,7 @@ Python-сервис работает по внутренней сети Docker (
 **Request Body (от ASP.NET к Python):**
 ```json
 {
-  "dzialka_id": "040101_1.0001.123/4",
+  "dzialka_id": "141611_2.0018.103",
   "target_date": "2026-06-15",
   "include_terrain": true,
   "geometry": {
@@ -172,7 +172,7 @@ Python-сервис работает по внутренней сети Docker (
 **Response `200 OK` (от Python к ASP.NET):**
 ```json
 {
-  "dzialka_id": "040101_1.0001.123/4",
+  "dzialka_id": "141611_2.0018.103",
   "terrain": {
     "status": "OK",
     "mean_slope_deg": 3.82,
@@ -244,7 +244,7 @@ from pydantic import BaseModel, Field
 
 
 class GeoExtractRequest(BaseModel):
-    dzialka_id: str = Field(..., example="040101_1.0001.123/4")
+    dzialka_id: str = Field(..., example="141611_2.0018.103")
     target_date: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$", example="2026-06-15")
     include_terrain: bool = True
     geometry: Dict[str, Any]  # GeoJSON Polygon или MultiPolygon

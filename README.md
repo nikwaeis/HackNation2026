@@ -170,6 +170,45 @@ What the tests verify:
 - **Geo-Worker ↔ backend contract** — the exact JSON the C# client sends (`need_terrain`) and binds (flat
   `mean_slope_deg`, `ndvi_mean`, `satellite_status` …), timeouts within the backend's 18 s budget, graceful degradation.
 
+## Frontend components and licences
+
+| Component | Licence | Use |
+|---|---|---|
+| React, React DOM, React Router | MIT | UI, routing |
+| Leaflet | BSD-2-Clause | Map |
+| react-leaflet, @react-leaflet/core | Hippocratic License 2.1 | React bindings for Leaflet (permissive, with human-rights conditions; not OSI-approved) |
+| lucide-react | ISC | Icons |
+| Tailwind CSS, Vite, TypeScript | MIT / MIT / Apache-2.0 | Build & styling |
+| Plus Jakarta Sans, JetBrains Mono (Google Fonts) | SIL OFL 1.1 | Fonts |
+| Vitest, Testing Library, Playwright | MIT / MIT / Apache-2.0 | Tests (dev only) |
+
+Data shown or queried by the browser, with the attribution the UI displays:
+
+| Data | Licence / terms | Attribution in the UI |
+|---|---|---|
+| OpenStreetMap tiles; ditches and fields via Overpass | ODbL 1.0 | "© OpenStreetMap", also over the aerial photo when OSM overlays are drawn |
+| Geoportal orthophoto, ULDK, KIEG (parcels, EGiB land-use class) | GUGiK open data (free re-use) | "Geoportal.gov.pl (GUGiK)", "GUGiK KIEG" |
+| Copernicus EDO drought (CDI) | Copernicus open data, free use with attribution | "Copernicus EDO" |
+| Open-Meteo Elevation (runoff arrows) | CC BY 4.0, free non-commercial API | "Open-Meteo (CC BY 4.0)" when arrows are drawn |
+
+On phones the map credits are behind an "i" button on the map; on desktop they are always visible.
+
+## Use of AI tools
+
+- **At runtime:** none in the frontend. The report texts come from the backend's deterministic templates;
+  the frontend only displays them and derives the "Wiarygodność oceny" indicator from data completeness.
+- **During development:** the frontend UI, tests and the geo-worker fixes were written with the help of
+  Claude Code (Anthropic), reviewed and run by the team.
+
+## Known frontend limitations
+
+- Land-use check after a map click uses the EGiB class from GUGiK KIEG; some counties do not publish it —
+  then the app falls back to OSM farmland or shows "not verified" and never blocks the selection.
+- GUGiK draws parcel boundaries only from map zoom 17; the Copernicus EDO grid is ~5 km, so at field zoom
+  the drought layer is a single cell (the legend says so).
+- Public Overpass / EDO servers can be slow or rate-limited; overlays then degrade with a clear status.
+- "Wiarygodność oceny" measures input completeness, not a statistical confidence interval.
+
 ## License
 
 Apache License 2.0 — see [LICENSE](LICENSE).

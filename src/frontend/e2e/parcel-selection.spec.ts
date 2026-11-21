@@ -146,7 +146,7 @@ test('click at country scale zooms in instead of picking a random parcel', async
 });
 
 test('typed parcel ID (how the jury enters parcels) is outlined on the map', async ({ page }) => {
-  await page.getByPlaceholder('np. 040101_1.0001.123/4').fill(HOUSE.id);
+  await page.getByPlaceholder('np. 141611_2.0018.103').fill(HOUSE.id);
   await expect(page.locator('.parcel-tag__title')).toHaveText(HOUSE.id);
   const { lat, lon, zoom } = await mapState(page);
   expect(zoom).toBeGreaterThanOrEqual(15); // map flew to the parcel

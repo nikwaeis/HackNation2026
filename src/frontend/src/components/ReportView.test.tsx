@@ -79,6 +79,33 @@ describe('ReportView — KOWR report requirements (zadanie 3.2 / 3.3)', () => {
     expect(screen.getByText(t.priorityNote)).toBeInTheDocument();
   });
 
+  it('shows the uncertainty level (Podstawy naukowe: "wskazywać poziom niepewności wyników")', () => {
+    renderReport();
+    expect(screen.getByTestId('confidence-chip')).toHaveTextContent('Wiarygodność oceny:wysoka');
+    expect(screen.getByTestId('confidence-box')).toHaveAttribute('data-level', 'high');
+
+    const noSat: AnalysisResponse = {
+      ...SAMPLE_DEMO_REPORT,
+      step1_diagnosis: {
+        ...SAMPLE_DEMO_REPORT.step1_diagnosis,
+        metrics: { ...SAMPLE_DEMO_REPORT.step1_diagnosis.metrics, ndviMean: null, ndwiMean: null, precip10yrAvg90dMm: null },
+      },
+      step4_sourcesAndLimitations: { ...SAMPLE_DEMO_REPORT.step4_sourcesAndLimitations, satelliteStatus: 'NO_DATA' },
+    };
+    renderReport(noSat);
+    const boxes = screen.getAllByTestId('confidence-box');
+    const box = boxes[boxes.length - 1];
+    expect(box).toHaveAttribute('data-level', 'low');
+    expect(box).toHaveTextContent('brak bezchmurnego zdjęcia satelitarnego');
+    expect(box).toHaveTextContent('brak 10-letniej normy opadów');
+  });
+
+  it('retention is listed before agronomic measures (KOWR sequence)', () => {
+    renderReport();
+    const groups = screen.getAllByRole('heading', { level: 4 }).map((h) => h.textContent);
+    expect(groups).toEqual([t.retentionGroupLandscape, t.retentionGroupSoil]);
+  });
+
   it('irrigation step shows the dose in mm and m³/ha', () => {
     renderReport();
     expect(screen.getByText(t.irrigationYes)).toBeInTheDocument();

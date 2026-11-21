@@ -24,6 +24,11 @@ test('sample report: map with the parcel, 4 KOWR stages, PDF and link buttons', 
     'Źródła, daty i ograniczenia',
   ]);
   await expect(page.getByText('Wysokie ryzyko suszy', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('confidence-chip')).toContainText('Wiarygodność oceny');
+
+  // runoff arrows use Open-Meteo elevations -> credited on the map (CC BY 4.0)
+  await expect(page.locator('.runoff-arrow').first()).toBeVisible();
+  await expect(page.locator('.leaflet-control-attribution')).toContainText('Open-Meteo');
 
   await page.getByRole('button', { name: 'Pobierz raport PDF' }).first().click();
   expect(await page.evaluate(() => (window as unknown as { __prints: number }).__prints)).toBe(1);

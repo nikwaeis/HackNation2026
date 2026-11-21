@@ -147,3 +147,19 @@ def test_ndvi_is_plausible_for_harmonised_dns(monkeypatch):
     assert r.ndvi_mean == pytest.approx((0.2278 - 0.0755) / (0.2278 + 0.0755), abs=1e-3)  # 0.502
     assert r.ndwi_mean == pytest.approx((0.2278 - 0.1929) / (0.2278 + 0.1929), abs=1e-3)
     assert r.ndvi_mean < 0.9
+
+
+def test_reflectance_is_clamped_at_zero_after_boa_offset():
+    """BOA offset -0.1: DN below 1000 must not give negative reflectance."""
+    refl = sat._reflectance(np.array([500, 1000, 1300]), (0.0001, -0.1))
+    assert refl.min() >= 0.0
+    assert refl.tolist() == pytest.approx([0.0, 0.0, 0.03])
+
+
+def test_dark_pixels_do_not_inflate_ndvi():
+    """A pixel whose red reflectance clamps to 0 is not a measurement: it must not count as NDVI 1.0."""
+    nir = np.array([[0.30, 0.30], [0.30, 0.30]])
+    red = np.array([[0.05, 0.05], [0.05, 0.00]])  # last pixel: red clamped to 0
+    valid = np.ones((2, 2), bool)
+    ndvi = sat._normalized_difference(nir, red, valid)
+    assert ndvi == pytest.approx((0.30 - 0.05) / (0.30 + 0.05), abs=1e-4)  # 0.7143, not pulled towards 1.0

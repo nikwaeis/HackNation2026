@@ -68,6 +68,8 @@ const PICK_MIN_ZOOM = 14;
 
 const NEON = '#00E5FF';
 const WATER = '#2F80ED';
+const OSM_OVERLAY_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> (ODbL)';
+const OPEN_METEO_ATTRIBUTION = '<a href="https://open-meteo.com/">Open-Meteo</a> (CC BY 4.0)';
 const WARN = '#F59E0B';
 const HATCH_ID = 'wodoplon-parcel-hatch';
 
@@ -260,6 +262,21 @@ function DevMapHandle({ interactive }: { interactive: boolean }) {
     const w = window as unknown as { __wodoplonMaps?: Record<string, L.Map> };
     w.__wodoplonMaps = { ...w.__wodoplonMaps, [interactive ? 'home' : 'report']: map };
   }, [map, interactive]);
+  return null;
+}
+
+/**
+ * Adds a credit line to the map while some derived overlay is shown (licences: OSM ODbL, Open-Meteo CC BY 4.0).
+ * The base layers carry their own attribution; overlays computed in the browser need this.
+ */
+function ExtraAttribution({ text }: { text: string }) {
+  const map = useMap();
+  useEffect(() => {
+    map.attributionControl?.addAttribution(text);
+    return () => {
+      map.attributionControl?.removeAttribution(text);
+    };
+  }, [map, text]);
   return null;
 }
 
@@ -801,6 +818,11 @@ export function ParcelMap({
         <ViewportContext enabled={showViewportWater} onChange={handleViewContext} />
         <DevMapHandle interactive={interactive} />
         <MapRef mapRef={mapRef} />
+        {/* ditches / fields come from OSM even over the aerial photo, so credit OSM whenever they are drawn */}
+        {baseLayer !== 'osm' && (viewWater.length > 0 || fields.length > 0 || (water?.features.length ?? 0) > 0) && (
+          <ExtraAttribution text={OSM_OVERLAY_ATTRIBUTION} />
+        )}
+        {arrows.length > 0 && <ExtraAttribution text={OPEN_METEO_ATTRIBUTION} />}
         {interactive && <MapShortcuts t={t} reserveTopRight={reserveTopRight} />}
         <FitPolygonBounds
           polygon={focus}

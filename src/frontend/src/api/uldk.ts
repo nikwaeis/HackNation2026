@@ -29,7 +29,7 @@ export class UldkError extends Error {
   }
 }
 
-/** Loose TERYT parcel ID check, e.g. 040101_1.0001.123/4 */
+/** Loose TERYT parcel ID check, e.g. 141611_2.0018.103 */
 export const PARCEL_ID_PATTERN = /^\d{6}_\d\.\d{4}\.\S+$/;
 
 /** Splits "(a),(b)" into ["a", "b"] respecting nesting. */

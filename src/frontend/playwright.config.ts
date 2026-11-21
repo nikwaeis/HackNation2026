@@ -6,6 +6,8 @@ import { defineConfig } from '@playwright/test';
  * Uses the locally installed Google Chrome (channel "chrome") — no browser download needed.
  *
  *   npm run test:e2e            # starts `npm run dev` if it is not running yet
+ *   E2E_ALL_BROWSERS=1 npm run test:e2e   # also Firefox and WebKit (Safari engine); KOWR requires Chrome,
+ *                                         # Firefox, Edge, Safari, Opera (Edge / Opera = Chromium, like Chrome)
  */
 export default defineConfig({
   testDir: './e2e',
@@ -17,12 +19,20 @@ export default defineConfig({
   outputDir: 'e2e-results',
   use: {
     baseURL: 'http://localhost:5173',
-    channel: 'chrome',
     viewport: { width: 1440, height: 900 },
     locale: 'pl-PL',
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure',
   },
+  projects: [
+    { name: 'chrome', use: { channel: 'chrome' } },
+    ...(process.env.E2E_ALL_BROWSERS
+      ? [
+          { name: 'firefox', use: { browserName: 'firefox' as const } },
+          { name: 'webkit', use: { browserName: 'webkit' as const } },
+        ]
+      : []),
+  ],
   webServer: {
     command: 'npm run dev',
     url: 'http://localhost:5173',

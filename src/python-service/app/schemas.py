@@ -37,7 +37,7 @@ Geometry = Annotated[Union[PolygonGeometry, MultiPolygonGeometry], Field(discrim
 
 
 class GeoExtractRequest(BaseModel):
-    dzialka_id: str = Field(..., examples=["040101_1.0001.123/4"])
+    dzialka_id: str = Field(..., examples=["141611_2.0018.103"])
     target_date: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$", examples=["2026-06-15"])
     # C# PythonServiceClient serializes `bool NeedTerrain` as "need_terrain"; the older doc calls it include_terrain
     include_terrain: bool = Field(True, validation_alias=AliasChoices("include_terrain", "need_terrain"))

@@ -70,7 +70,7 @@
 **Тело запроса (`Request JSON`):**
 ```json
 {
-  "dzialkaId": "040101_1.0001.123/4",
+  "dzialkaId": "141611_2.0018.103",
   "lat": null,
   "lon": null,
   "cropId": "winter_wheat",
@@ -85,7 +85,7 @@
 {
   "reportUuid": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
   "parcelInfo": {
-    "dzialkaId": "040101_1.0001.123/4",
+    "dzialkaId": "141611_2.0018.103",
     "voivodeship": "kujawsko-pomorskie",
     "areaHa": 14.52,
     "cropId": "winter_wheat",
@@ -163,7 +163,7 @@
 **Запрос от ASP.NET Core:**
 ```json
 {
-  "dzialka_id": "040101_1.0001.123/4",
+  "dzialka_id": "141611_2.0018.103",
   "target_date": "2026-07-15",
   "need_terrain": true,
   "geometry": {

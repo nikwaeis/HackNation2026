@@ -101,7 +101,7 @@ export function HomePage({ t, lang }: HomePageProps) {
         // show the ULDK boundary right away, then check what kind of land it is
         setLookup({ status: 'found', source, parcel, territory: { status: 'checking' } });
         const [lat, lon] = clickPoint ? [clickPoint.lat, clickPoint.lon] : labelPoint(parcel.geometry);
-        assessTerritory({ lat, lon }, viewFields.current, controller.signal)
+        assessTerritory({ lat, lon }, viewFields.current, controller.signal, parcel.id)
           .then((verdict) => {
             if (!controller.signal.aborted) {
               setLookup({ status: 'found', source, parcel, territory: { status: 'done', verdict } });

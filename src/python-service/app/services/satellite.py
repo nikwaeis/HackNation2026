@@ -227,12 +227,14 @@ def _effective_scale_offset(
 
 def _reflectance(dn: np.ndarray, scale_offset: tuple[float, float]) -> np.ndarray:
     scale, offset = scale_offset  # Earth Search v1: scale 0.0001, offset -0.1 (BOA offset, baseline >= 04.00)
-    return dn.astype("float64") * scale + offset
+    # dark pixels can fall below 0 after the BOA offset; surface reflectance cannot be negative
+    return np.maximum(0.0, dn.astype("float64") * scale + offset)
 
 
 def _normalized_difference(a: np.ndarray, b: np.ndarray, valid: np.ndarray) -> float | None:
     denom = a + b
-    ok = valid & (denom > 0)
+    # a band clamped to 0 reflectance is not a measurement: it would pin the index at +/-1 (NDVI 1.0 on dark pixels)
+    ok = valid & (a > 0) & (b > 0) & (denom > 0)
     if not ok.any():
         return None
     nd = np.clip((a[ok] - b[ok]) / denom[ok], -1.0, 1.0)
