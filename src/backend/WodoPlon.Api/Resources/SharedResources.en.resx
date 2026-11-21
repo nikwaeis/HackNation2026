@@ -22,4 +22,127 @@
     <data name="Common.UnexpectedError" xml:space="preserve">
         <value>An unexpected error occurred.</value>
     </data>
+    <data name="Vo.ParcelId.Empty" xml:space="preserve">
+        <value>Parcel id cannot be empty.</value>
+    </data>
+    <data name="Vo.ParcelId.MaxLength" xml:space="preserve">
+        <value>Parcel id is too long (max. {0} characters).</value>
+    </data>
+    <data name="Vo.ParcelId.InvalidFormat" xml:space="preserve">
+        <value>Parcel id must be in TERYT format, e.g. 040101_1.0001.123/4.</value>
+    </data>
+    <data name="Vo.CropId.Empty" xml:space="preserve">
+        <value>Crop code cannot be empty.</value>
+    </data>
+    <data name="Vo.CropId.MaxLength" xml:space="preserve">
+        <value>Crop code is too long (max. {0} characters).</value>
+    </data>
+    <data name="Vo.CropId.InvalidFormat" xml:space="preserve">
+        <value>Crop code may contain only lowercase letters and underscores.</value>
+    </data>
+    <data name="Vo.Percent.OutOfRange" xml:space="preserve">
+        <value>Percentage must be between {0} and {1}.</value>
+    </data>
+    <data name="Ent.Crop.EmptyName" xml:space="preserve">
+        <value>Crop name cannot be empty.</value>
+    </data>
+    <data name="Ent.Crop.NameMaxLength" xml:space="preserve">
+        <value>Crop name is too long (max. {0} characters).</value>
+    </data>
+    <data name="Ent.Crop.CoefficientOutOfRange" xml:space="preserve">
+        <value>Crop coefficient Kc must be between {0} and {1}.</value>
+    </data>
+    <data name="Ent.Crop.EmptyCriticalMonths" xml:space="preserve">
+        <value>At least one critical month is required.</value>
+    </data>
+    <data name="Ent.Crop.InvalidMonth" xml:space="preserve">
+        <value>Critical month must be between 1 and 12.</value>
+    </data>
+    <data name="Ent.Crop.InvalidRootDepth" xml:space="preserve">
+        <value>Root depth must be greater than zero.</value>
+    </data>
+    <data name="Ent.HydroFeature.NameMaxLength" xml:space="preserve">
+        <value>Water object name is too long (max. {0} characters).</value>
+    </data>
+    <data name="Ent.HydroFeature.EmptyGeometry" xml:space="preserve">
+        <value>Water object geometry cannot be empty.</value>
+    </data>
+    <data name="Ent.HydroFeature.InvalidSrid" xml:space="preserve">
+        <value>Water object geometry must use SRID {0}.</value>
+    </data>
+    <data name="Ent.Parcel.VoivodeshipMaxLength" xml:space="preserve">
+        <value>Voivodeship name is too long (max. {0} characters).</value>
+    </data>
+    <data name="Ent.Parcel.InvalidArea" xml:space="preserve">
+        <value>Parcel area must be greater than zero.</value>
+    </data>
+    <data name="Ent.Parcel.EmptyGeometry" xml:space="preserve">
+        <value>Parcel geometry cannot be empty.</value>
+    </data>
+    <data name="Ent.Parcel.InvalidSrid" xml:space="preserve">
+        <value>Parcel geometry must use SRID {0}.</value>
+    </data>
+    <data name="Ent.ParcelStaticProfile.SlopeOutOfRange" xml:space="preserve">
+        <value>Slope must be between {0} and {1} degrees.</value>
+    </data>
+    <data name="Ent.ParcelStaticProfile.MeanSlopeExceedsMax" xml:space="preserve">
+        <value>Mean slope cannot exceed max slope.</value>
+    </data>
+    <data name="Ent.ParcelStaticProfile.SoilFractionsExceedTotal" xml:space="preserve">
+        <value>Sand, clay and silt together cannot exceed 100%.</value>
+    </data>
+    <data name="Ent.ParcelStaticProfile.NegativeValue" xml:space="preserve">
+        <value>Soil and water values cannot be negative.</value>
+    </data>
+    <data name="Ent.DynamicObservation.NegativeValue" xml:space="preserve">
+        <value>Weather values cannot be negative.</value>
+    </data>
+    <data name="Ent.DynamicObservation.InvalidWeatherMonth" xml:space="preserve">
+        <value>Monthly weather data is invalid: years back must be from {0} to {1}, month from 1 to 12.</value>
+    </data>
+    <data name="Ent.DynamicObservation.IndexOutOfRange" xml:space="preserve">
+        <value>Satellite index must be between {0} and {1}.</value>
+    </data>
+    <data name="Ent.DynamicObservation.MissingSatelliteData" xml:space="preserve">
+        <value>Satellite indices and scene date are required for this status.</value>
+    </data>
+    <data name="Ent.DynamicObservation.UnexpectedSatelliteData" xml:space="preserve">
+        <value>Satellite values must be empty when there is no data.</value>
+    </data>
+    <data name="Ent.DynamicObservation.SceneOutOfWindow" xml:space="preserve">
+        <value>Satellite scene must be within {0} days of the analysis date.</value>
+    </data>
+    <data name="Ent.SavedReport.EmptyPayload" xml:space="preserve">
+        <value>Report content cannot be empty.</value>
+    </data>
+    <data name="External.ParcelNotFound" xml:space="preserve">
+        <value>No cadastral parcel was found for the given location.</value>
+    </data>
+    <data name="External.UldkUnavailable" xml:space="preserve">
+        <value>The ULDK GUGiK service is temporarily unavailable. Please try again shortly.</value>
+    </data>
+    <data name="External.WeatherUnavailable" xml:space="preserve">
+        <value>Open-Meteo weather data is temporarily unavailable. Please try again shortly.</value>
+    </data>
+    <data name="Analysis.LocationRequired" xml:space="preserve">
+        <value>Provide a cadastral parcel id or pick a point on the map.</value>
+    </data>
+    <data name="Analysis.LatitudeOutOfRange" xml:space="preserve">
+        <value>Latitude must be between -90 and 90.</value>
+    </data>
+    <data name="Analysis.LongitudeOutOfRange" xml:space="preserve">
+        <value>Longitude must be between -180 and 180.</value>
+    </data>
+    <data name="Analysis.CropRequired" xml:space="preserve">
+        <value>Choose a crop.</value>
+    </data>
+    <data name="Analysis.CropNotFound" xml:space="preserve">
+        <value>The selected crop was not found.</value>
+    </data>
+    <data name="Analysis.TargetDateOutOfRange" xml:space="preserve">
+        <value>The analysis date must be within the last 10 years and not in the future.</value>
+    </data>
+    <data name="Analysis.ReportNotFound" xml:space="preserve">
+        <value>Report not found.</value>
+    </data>
 </root>
