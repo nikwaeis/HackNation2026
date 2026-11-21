@@ -70,13 +70,14 @@ public sealed class OverpassClient(HttpClient httpClient, ILogger<OverpassClient
                       && coords.Length >= 4 && coords[0].Equals2D(coords[^1]);
         Geometry geom = isArea ? Factory.CreatePolygon(coords) : Factory.CreateLineString(coords);
 
-        return new HydroFeatureData(type.Value, tags.GetValueOrDefault("name"), geom);
+        return new HydroFeatureData(element.Id, type.Value, tags.GetValueOrDefault("name"), geom);
     }
 
     private sealed record OverpassResponse([property: JsonPropertyName("elements")] Element[]? Elements);
 
     private sealed record Element
     (
+        [property: JsonPropertyName("id")] long Id,
         [property: JsonPropertyName("tags")] Dictionary<string, string>? Tags,
         [property: JsonPropertyName("geometry")] LatLon[]? Geometry
     );

@@ -11,4 +11,4 @@ public interface IOverpassClient
         CancellationToken cancellationToken = default);
 }
 
-public sealed record HydroFeatureData(HydroFeatureType Type, string? Name, Geometry Geom);
+public sealed record HydroFeatureData(long OsmId, HydroFeatureType Type, string? Name, Geometry Geom);

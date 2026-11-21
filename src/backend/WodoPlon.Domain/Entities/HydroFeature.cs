@@ -14,6 +14,9 @@ public sealed class HydroFeature
     /// <summary> Database generated id </summary>
     public long Id { get; private set; }
 
+    /// <summary> OpenStreetMap way id; dedupes objects fetched again for neighbouring parcels </summary>
+    public long? OsmId { get; private set; }
+
     /// <summary> Kind of water object </summary>
     public HydroFeatureType Type { get; private set; }
 
@@ -25,7 +28,7 @@ public sealed class HydroFeature
 
     private HydroFeature() { }
 
-    public static Result<HydroFeature> Create(HydroFeatureType type, string? name, Geometry geom)
+    public static Result<HydroFeature> Create(HydroFeatureType type, string? name, Geometry geom, long? osmId = null)
     {
         name = string.IsNullOrWhiteSpace(name) ? null : name.Trim();
         if (name?.Length > NameMaxLength)
@@ -38,6 +41,7 @@ public sealed class HydroFeature
 
         return new HydroFeature
         {
+            OsmId = osmId,
             Type = type,
             Name = name,
             Geom = geom

@@ -162,8 +162,8 @@ public class ExternalApiClientsTests
         var features = await new OverpassClient(stub.Client(), NullLogger<OverpassClient>.Instance)
             .GetHydroAroundAsync(53.05, 18.35, 1000);
 
-        features!.Select(f => (f.Type, f.Name, f.Geom.GeometryType))
-            .Should().Equal((HydroFeatureType.Ditch, null, "LineString"), (HydroFeatureType.Lake, "Jezioro", "Polygon"));
+        features!.Select(f => (f.OsmId, f.Type, f.Name, f.Geom.GeometryType))
+            .Should().Equal((1, HydroFeatureType.Ditch, null, "LineString"), (2, HydroFeatureType.Lake, "Jezioro", "Polygon"));
         features.Should().OnlyContain(f => f.Geom.SRID == Parcel.Srid && f.Geom.Coordinate.X >= 18);
         stub.LastBody.Should().Contain("around%3A1000%2C53.05%2C18.35");
     }

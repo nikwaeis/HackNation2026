@@ -12,6 +12,7 @@ using WodoPlon.Api.Common.Seeds;
 using WodoPlon.Api.Common.Services;
 using WodoPlon.Api.Data;
 using WodoPlon.Api.Extensions;
+using WodoPlon.Api.Features.Analysis.Shared;
 using WodoPlon.Api.Features.Health;
 using WodoPlon.Api.Middleware;
 
@@ -48,6 +49,7 @@ builder.Services.AddSingleton<IUserAgentService, UserAgentService>();
 builder.Services.AddSingleton<IRateLimitService, RedisRateLimitService>();
 builder.Services.AddLocalization();
 builder.Services.AddScoped<IDataSeeder, CropSeeder>();
+builder.Services.AddScoped<ParcelProfileService>();
 
 // enums go over the wire as names, not numbers
 builder.Services.ConfigureHttpJsonOptions(o =>

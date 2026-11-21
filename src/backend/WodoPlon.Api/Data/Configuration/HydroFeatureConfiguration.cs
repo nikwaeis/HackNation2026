@@ -16,6 +16,14 @@ public class HydroFeatureConfiguration : IEntityTypeConfiguration<HydroFeature>
             .HasColumnName("id")
             .UseIdentityByDefaultColumn();
 
+        builder.Property(h => h.OsmId)
+            .HasColumnName("osm_id")
+            .IsRequired(false);
+
+        builder.HasIndex(h => h.OsmId)
+            .IsUnique()
+            .HasDatabaseName("ux_hydro_features_osm_id");
+
         builder.Property(h => h.Type)
             .HasColumnName("feature_type")
             .HasConversion<string>()

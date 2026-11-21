@@ -171,6 +171,10 @@ namespace WodoPlon.Api.Data.Migrations
                         .HasColumnType("character varying(150)")
                         .HasColumnName("name");
 
+                    b.Property<long?>("OsmId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("osm_id");
+
                     b.Property<string>("Type")
                         .IsRequired()
                         .HasMaxLength(30)
@@ -183,6 +187,10 @@ namespace WodoPlon.Api.Data.Migrations
                         .HasDatabaseName("ix_hydro_features_geom");
 
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Geom"), "gist");
+
+                    b.HasIndex("OsmId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_hydro_features_osm_id");
 
                     b.ToTable("hydro_features", (string)null);
                 });
