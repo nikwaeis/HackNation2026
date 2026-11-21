@@ -5,5 +5,5 @@ pydantic-settings>=2.6.0,<3.0.0  # MIT
 httpx>=0.27.0,<1.0.0             # BSD-3-Clause
 numpy>=1.26.0,<3.0.0             # BSD-3-Clause
 rasterio>=1.4.0,<2.0.0           # BSD-3-Clause (wheels bundle GDAL/PROJ, MIT)
-shapely>=2.0.0,<3.0.0            # BSD-3-Clause
+shapely>=2.1.0,<3.0.0          # BSD-3-Clause
 pyproj>=3.6.0,<4.0.0             # MIT

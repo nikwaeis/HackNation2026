@@ -31,6 +31,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         timeout=settings.http_timeout_s,
         headers={"User-Agent": "wodoplon-geo-worker/1.0"},
         follow_redirects=True,
+        # Test hook: tests set app.state.http_transport to an httpx.MockTransport. None = real network.
+        transport=getattr(app.state, "http_transport", None),
     ) as client:
         app.state.http = client
         yield
