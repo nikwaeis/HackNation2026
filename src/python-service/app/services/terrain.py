@@ -135,12 +135,28 @@ def _compute(content: bytes, polygon_2180: BaseGeometry, steep_threshold_deg: fl
     )
 
 
+async def _fetch_with_retry(
+    client: httpx.AsyncClient, settings: Settings, bbox: tuple[float, float, float, float], step: float
+) -> bytes:
+    """GUGiK NMT WCS occasionally stalls (observed live: single requests over 6.5 s, the next one fast).
+    One retry on timeout fits the module budget: 2 x http_timeout_s < module_timeout_s."""
+    attempts = 2 if 2 * settings.http_timeout_s < settings.module_timeout_s else 1
+    for attempt in range(1, attempts + 1):
+        try:
+            return await _fetch_coverage(client, settings, bbox, step)
+        except httpx.TimeoutException:
+            if attempt == attempts:
+                raise
+            log.info("GUGiK NMT WCS timed out, retrying once")
+    raise AssertionError("unreachable")
+
+
 async def analyze_terrain(polygon_wgs84: BaseGeometry, client: httpx.AsyncClient, settings: Settings) -> TerrainMetrics:
     """Never raises for upstream failures; returns status NO_DATA / ERROR with error_reason instead."""
     try:
         polygon_2180 = reproject(polygon_wgs84, PL_1992)
         step = grid_step_m(polygon_2180)
-        content = await _fetch_coverage(client, settings, _request_bbox(polygon_2180, step), step)
+        content = await _fetch_with_retry(client, settings, _request_bbox(polygon_2180, step), step)
         return await asyncio.to_thread(_compute, content, polygon_2180, settings.steep_slope_threshold_deg)
     except WcsServiceError as exc:
         # e.g. "Requested BBOX is outside requested coverage BBOX" -> parcel outside Poland

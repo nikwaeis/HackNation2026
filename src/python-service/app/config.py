@@ -23,8 +23,10 @@ class Settings(BaseSettings):
     cloud_ok_pct: float = 20.0
     cloud_fallback_pct: float = 50.0
 
-    # Hard per-module budget enforced in main.py via asyncio.wait_for.
-    module_timeout_s: float = 8.0
+    # Hard per-module budget enforced in main.py via asyncio.wait_for. The ASP.NET Core client waits 18 s for the
+    # whole call (docs/api.md §5, appsettings PythonService:TimeoutSeconds); modules run in parallel, so 14 s keeps
+    # a safe margin while giving Sentinel-2 enough time to skip cloudy scenes (COG reads take ~1-2 s per band).
+    module_timeout_s: float = 14.0
     # Single outbound HTTP request timeout (must stay below module_timeout_s).
     http_timeout_s: float = 6.5
 

@@ -23,10 +23,11 @@ export function Header({
 }: HeaderProps) {
   return (
     <header
-      className="no-print sticky top-0 z-[1100]"
+      className="no-print sticky top-0 z-[1100] backdrop-blur-md"
       style={{
-        backgroundColor: 'var(--bg-surface)',
+        backgroundColor: 'var(--glass-bg)',
         borderBottom: '1px solid var(--hairline)',
+        boxShadow: '0 1px 0 rgba(255,255,255,0.6) inset, 0 6px 18px -14px rgba(15,23,42,0.35)',
       }}
     >
       <a
@@ -67,7 +68,7 @@ export function Header({
             />
           </svg>
           <div className="flex items-baseline gap-2.5">
-            <span className="text-lg font-bold tracking-tight" style={{ color: 'var(--ink-primary)' }}>
+            <span className="text-lg font-extrabold tracking-tight" style={{ color: 'var(--brand-primary)' }}>
               {t.appName}
             </span>
             <span className="hidden text-sm sm:inline" style={{ color: 'var(--ink-muted)' }}>

@@ -101,3 +101,49 @@ def test_normalized_difference_ignores_invalid_and_clips():
     valid = np.array([[True, True], [True, False]])
     # pixel (0,1): denominator 0 -> skipped; (1,1) invalid -> skipped
     assert sat._normalized_difference(a, b, valid) == round(((0.4 / 0.6) + 0.0) / 2, 4)
+
+
+# --------------------------------------------------------------------------- reflectance offset sanity
+#
+# Live finding (Earth Search v1): some items declare raster:bands offset -0.1 although their DNs are already
+# harmonised (same acquisition as an offset-0 item, identical DNs; or every land pixel below DN 1000).
+# Applying the offset blindly makes red reflectance negative and pins NDVI near 1.0.
+
+
+def _scene(offset: float) -> sat._Scene:
+    so = {b: (0.0001, offset) for b in ("red", "nir", "swir16")}
+    so["scl"] = (1.0, 0.0)
+    return sat._Scene(id="S", date=REF, epsg=32634, hrefs={}, scale_offset=so)
+
+
+def test_offset_kept_when_dns_carry_it():
+    """Baseline >= 04.00 DNs (+1000) -> offset -0.1 is real and must be applied."""
+    red = np.full((4, 4), 1300)  # 0.03 reflectance after offset
+    valid = np.ones((4, 4), bool)
+    assert sat._effective_scale_offset(_scene(-0.1), red, valid)["red"] == (0.0001, -0.1)
+
+
+def test_offset_dropped_when_it_would_make_reflectance_negative():
+    """Observed on S2 2026-05-29 over a Lubowidz plot: red DN 589-969 with declared offset -0.1."""
+    red = np.array([[589, 755], [969, 700]])
+    valid = np.ones((2, 2), bool)
+    eff = sat._effective_scale_offset(_scene(-0.1), red, valid)
+    assert eff["red"] == (0.0001, 0.0) and eff["nir"] == (0.0001, 0.0) and eff["swir16"] == (0.0001, 0.0)
+
+
+def test_ndvi_is_plausible_for_harmonised_dns(monkeypatch):
+    """End-to-end on the observed DN medians: NDVI must be ~0.50, not ~1.0."""
+    dn = {"red": 755, "nir": 2278, "swir16": 1929}
+    grid = sat._Grid(bounds=(0, 0, 40, 40), shape=(4, 4), inside=np.ones((4, 4), bool))
+    a = sat._Assessment(scene=_scene(-0.1), grid=grid, clean=np.ones((4, 4), bool), cloud_pct=0.0)
+    band_of = {"r": "red", "n": "nir", "s": "swir16"}
+    monkeypatch.setattr(sat, "_read_band", lambda href, g, r: np.full(g.shape, dn[band_of[href]], dtype="uint16"))
+    a = sat._Assessment(
+        scene=sat._Scene(id="S", date=REF, epsg=32634, hrefs={"red": "r", "nir": "n", "swir16": "s"},
+                         scale_offset=a.scene.scale_offset),
+        grid=grid, clean=a.clean, cloud_pct=0.0,
+    )
+    r = asyncio.run(sat._compute_indices(a, "OK"))
+    assert r.ndvi_mean == pytest.approx((0.2278 - 0.0755) / (0.2278 + 0.0755), abs=1e-3)  # 0.502
+    assert r.ndwi_mean == pytest.approx((0.2278 - 0.1929) / (0.2278 + 0.1929), abs=1e-3)
+    assert r.ndvi_mean < 0.9

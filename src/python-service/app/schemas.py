@@ -1,12 +1,17 @@
-"""Request / response models. Mirrors section 2 of api_asp_net_core_python_fastapi.md (POST /extract-geo).
+"""Request / response models for POST /extract-geo.
 
-Fields not in the contract (elevation_*, error_reason) are additive: the C# DTOs ignore unknown properties.
+Two documents describe this endpoint and the ASP.NET Core client follows the flat one:
+  * docs/api.md §3.4 + C# PythonServiceClient / GeoMetrics: request flag `need_terrain`,
+    FLAT response (mean_slope_deg, ndvi_mean, satellite_status, ...)  <- what the backend actually binds;
+  * api_asp_net_core_python_fastapi.md §2: flag `include_terrain`, nested `terrain` / `satellite` blocks.
+The worker accepts both flag names and returns both views (flat fields + nested blocks with error_reason).
+System.Text.Json ignores unknown properties, so the nested blocks are harmless for the C# client.
 """
 
 import datetime as dt
 from typing import Annotated, Literal, Union
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import AliasChoices, BaseModel, Field, model_validator
 from shapely import force_2d
 from shapely.geometry import shape
 from shapely.geometry.base import BaseGeometry
@@ -34,7 +39,8 @@ Geometry = Annotated[Union[PolygonGeometry, MultiPolygonGeometry], Field(discrim
 class GeoExtractRequest(BaseModel):
     dzialka_id: str = Field(..., examples=["040101_1.0001.123/4"])
     target_date: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$", examples=["2026-06-15"])
-    include_terrain: bool = True
+    # C# PythonServiceClient serializes `bool NeedTerrain` as "need_terrain"; the older doc calls it include_terrain
+    include_terrain: bool = Field(True, validation_alias=AliasChoices("include_terrain", "need_terrain"))
     geometry: Geometry = Field(description="GeoJSON Polygon/MultiPolygon in WGS84 (EPSG:4326), [lon, lat] order.")
 
     @model_validator(mode="after")
@@ -103,7 +109,41 @@ class SatelliteMetrics(BaseModel):
         return cls(status="ERROR", error_reason=reason)
 
 
+# Values the C# SatelliteStatus enum (Ok | CloudyFallback | NoData) can bind; there is no Error member.
+CSharpSatelliteStatus = Literal["OK", "CLOUDY_FALLBACK", "NO_DATA"]
+
+
 class GeoExtractResponse(BaseModel):
     dzialka_id: str
-    terrain: TerrainMetrics | None = None  # null when include_terrain=false
+
+    # --- flat view bound by the ASP.NET Core GeoMetrics record (docs/api.md §3.4) ---
+    mean_slope_deg: float | None = None
+    max_slope_deg: float | None = None
+    steep_area_pct: float | None = None
+    ndvi_mean: float | None = None
+    ndwi_mean: float | None = None
+    satellite_scene_date: str | None = None
+    cloud_cover_pct: float | None = None
+    satellite_status: CSharpSatelliteStatus = "NO_DATA"
+
+    # --- detailed blocks (status + error_reason per module) ---
+    terrain: TerrainMetrics | None = None  # null when the terrain was not requested
     satellite: SatelliteMetrics
+
+    @model_validator(mode="after")
+    def _flatten(self) -> "GeoExtractResponse":
+        """Derive the flat fields from the nested blocks so the two views can never disagree."""
+        t = self.terrain if self.terrain is not None and self.terrain.status == "OK" else None
+        self.mean_slope_deg = t.mean_slope_deg if t else None
+        self.max_slope_deg = t.max_slope_deg if t else None
+        self.steep_area_pct = t.steep_area_pct if t else None
+
+        sat = self.satellite
+        usable = sat.status in ("OK", "CLOUDY_FALLBACK")
+        # ERROR has no C# counterpart: report it as NO_DATA so the backend shows the "no satellite data" warning
+        self.satellite_status = sat.status if usable else "NO_DATA"
+        self.ndvi_mean = sat.ndvi_mean if usable else None
+        self.ndwi_mean = sat.ndwi_mean if usable else None
+        self.satellite_scene_date = sat.scene_date if usable else None
+        self.cloud_cover_pct = sat.cloud_cover_pct if usable else None
+        return self

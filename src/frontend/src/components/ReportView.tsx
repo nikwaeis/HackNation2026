@@ -1,22 +1,33 @@
-import { useState } from 'react';
+import { useState, type ComponentType, type ReactNode } from 'react';
 import {
   AlertOctagon,
   AlertTriangle,
   ArrowLeft,
+  CalendarDays,
   Check,
   CheckCircle2,
-  ChevronDown,
-  ChevronUp,
   CloudOff,
+  CloudRain,
+  Database,
   Droplets,
+  FileDown,
+  History,
   Info,
+  Leaf,
   Link2,
-  Printer,
+  Mountain,
+  Satellite,
+  Search,
   ShieldCheck,
   Sprout,
+  Sun,
+  Trees,
+  TriangleAlert,
   Waves,
+  Wheat,
+  type LucideProps,
 } from 'lucide-react';
-import type { AnalysisResponse, WaterDeficitLevel } from '../types/api';
+import type { AnalysisResponse, RetentionMeasure, WaterDeficitLevel } from '../types/api';
 import { CROP_NAMES_EN, type Language, type TranslationDict } from '../i18n/translations';
 import { ParcelMap } from './ParcelMap';
 
@@ -28,55 +39,203 @@ interface ReportViewProps {
   onBack: () => void;
 }
 
+const LEVELS: WaterDeficitLevel[] = ['LOW', 'MODERATE', 'HIGH', 'CRITICAL'];
+
 function riskVisual(level: WaterDeficitLevel) {
   switch (level) {
     case 'CRITICAL':
-      return { ink: 'var(--risk-critical-ink)', Icon: AlertOctagon };
+      return { ink: 'var(--risk-critical-ink)', solid: 'var(--risk-critical-solid)', Icon: AlertOctagon };
     case 'HIGH':
-      return { ink: 'var(--risk-high-ink)', Icon: AlertTriangle };
+      return { ink: 'var(--risk-high-ink)', solid: 'var(--risk-high-solid)', Icon: AlertTriangle };
     case 'MODERATE':
-      return { ink: 'var(--risk-moderate-ink)', Icon: Info };
+      return { ink: 'var(--risk-moderate-ink)', solid: 'var(--risk-moderate-solid)', Icon: Info };
     default:
-      return { ink: 'var(--risk-low-ink)', Icon: CheckCircle2 };
+      return { ink: 'var(--risk-low-ink)', solid: 'var(--risk-low-solid)', Icon: CheckCircle2 };
   }
 }
 
-function formatNum(value: number | null | undefined, digits = 1): string {
-  if (value === null || value === undefined || Number.isNaN(value)) return '—';
-  return value.toFixed(digits);
+function isMissing(value: number | null | undefined): value is null | undefined {
+  return value === null || value === undefined || Number.isNaN(value);
 }
+
+type Priority = 'high' | 'medium' | 'low';
+
+/**
+ * The API returns retention measures already ordered by implementation priority (landscape first);
+ * the badge combines that order with the drought risk level.
+ */
+function priorityFor(index: number, level: WaterDeficitLevel): Priority {
+  if (level === 'HIGH' || level === 'CRITICAL') return index < 2 ? 'high' : 'medium';
+  if (level === 'MODERATE') return index < 2 ? 'medium' : 'low';
+  return 'low';
+}
+
+const PRIORITY_STYLE: Record<Priority, { badge: React.CSSProperties; accent: string }> = {
+  high: { badge: { backgroundImage: 'linear-gradient(90deg, #dc2626, #f97316)', color: '#ffffff' }, accent: '#ea580c' },
+  medium: { badge: { backgroundColor: '#d9f99d', color: '#3f6212' }, accent: '#84cc16' },
+  low: { badge: { backgroundColor: '#e2e8f0', color: '#334155' }, accent: '#94a3b8' },
+};
+
+function measureIcon(m: RetentionMeasure): ComponentType<LucideProps> {
+  const s = m.title.toLowerCase();
+  if (/zastawk|rów|row |rowie|ditch|sluice/.test(s)) return Waves;
+  if (/zadrzew|drzew|bufor|stok|tree|buffer|slope/.test(s)) return Trees;
+  if (/międzyplon|miedzyplon|bezork|poplon|cover crop|catch crop/.test(s)) return Sprout;
+  if (/mulcz|resztk|okryw|mulch|residue/.test(s)) return Leaf;
+  return m.type === 'LANDSCAPE' ? Droplets : Sprout;
+}
+
+/* ---------- building blocks ---------- */
+
+function StepSection({
+  number,
+  t,
+  title,
+  lead,
+  id,
+  children,
+}: {
+  number: number;
+  t: TranslationDict;
+  title: string;
+  lead: string;
+  id: string;
+  children: ReactNode;
+}) {
+  return (
+    <section aria-labelledby={id} className="print-break-avoid border-t pt-6" style={{ borderColor: 'var(--hairline)' }}>
+      <header className="mb-4 flex items-start gap-3">
+        <span aria-hidden="true" className="step-badge mt-0.5 !h-7 !w-7 !text-sm">
+          {number}
+        </span>
+        <div className="min-w-0">
+          <p className="text-[0.7rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--ink-muted)' }}>
+            {t.stepWord} {number} / 4
+          </p>
+          <h2 id={id} className="text-lg font-bold leading-tight tracking-tight" style={{ color: 'var(--ink-primary)' }}>
+            {title}
+          </h2>
+          <p className="mt-0.5 text-[0.8rem] leading-relaxed" style={{ color: 'var(--ink-secondary)' }}>
+            {lead}
+          </p>
+        </div>
+      </header>
+      {children}
+    </section>
+  );
+}
+
+function Widget({ children, className = '' }: { children: ReactNode; className?: string }) {
+  return (
+    <div className={`rounded-xl p-3.5 ${className}`} style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--hairline)' }}>
+      {children}
+    </div>
+  );
+}
+
+function WidgetLabel({ icon, children }: { icon: ReactNode; children: ReactNode }) {
+  return (
+    <p className="flex items-center gap-1.5 text-[0.72rem] font-semibold leading-tight" style={{ color: 'var(--ink-secondary)' }}>
+      <span aria-hidden="true" style={{ color: 'var(--ink-muted)' }}>
+        {icon}
+      </span>
+      {children}
+    </p>
+  );
+}
+
+function NoData({ t }: { t: TranslationDict }) {
+  return (
+    <span className="mt-1.5 inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold" style={{ backgroundColor: 'var(--bg-hover)', color: 'var(--ink-muted)' }}>
+      {t.unknownValue}
+    </span>
+  );
+}
+
+function IndexScale({
+  t,
+  label,
+  icon,
+  value,
+  gradient,
+  lowWord,
+  highWord,
+  fmt,
+}: {
+  t: TranslationDict;
+  label: string;
+  icon: ReactNode;
+  value: number | null;
+  gradient: string;
+  lowWord: string;
+  highWord: string;
+  fmt: (v: number, d?: number) => string;
+}) {
+  const pos = value === null ? null : Math.max(0, Math.min(100, ((value + 1) / 2) * 100));
+  return (
+    <Widget>
+      <div className="flex items-start justify-between gap-2">
+        <WidgetLabel icon={icon}>{label}</WidgetLabel>
+        {value !== null && (
+          <span className="num text-xl font-bold leading-none" style={{ color: 'var(--ink-primary)' }}>
+            {value > 0 ? '+' : ''}
+            {fmt(value, 2)}
+          </span>
+        )}
+      </div>
+      {value === null ? (
+        <NoData t={t} />
+      ) : (
+        <>
+          <div className="scale-track mt-3.5" style={{ backgroundImage: gradient }} role="img" aria-label={`${label}: ${fmt(value, 2)} (−1 … 1)`}>
+            <span className="scale-marker" style={{ left: `${pos}%` }} />
+          </div>
+          <div className="num mt-1.5 flex justify-between text-[0.65rem] font-medium" style={{ color: 'var(--ink-muted)' }}>
+            <span>−1 · {lowWord}</span>
+            <span>0</span>
+            <span>
+              {highWord} · 1
+            </span>
+          </div>
+        </>
+      )}
+    </Widget>
+  );
+}
+
+/* ---------- report ---------- */
 
 export function ReportView({ t, lang, report, isDemo = false, onBack }: ReportViewProps) {
   const [copied, setCopied] = useState(false);
-  const [showTech, setShowTech] = useState(false);
 
-  const {
-    parcelInfo,
-    step1_diagnosis,
-    step2_causesAndRetention,
-    step3_irrigation,
-    step4_sourcesAndLimitations,
-  } = report;
+  const { parcelInfo, step1_diagnosis, step2_causesAndRetention, step3_irrigation, step4_sourcesAndLimitations } = report;
   const metrics = step1_diagnosis.metrics;
-  const risk = riskVisual(step1_diagnosis.riskLevel);
+  const level = step1_diagnosis.riskLevel;
+  const risk = riskVisual(level);
   const RiskIcon = risk.Icon;
+  const levelIdx = LEVELS.indexOf(level);
+
+  const locale = lang === 'pl' ? 'pl-PL' : 'en-GB';
+  const fmt = (value: number, digits = 1) =>
+    new Intl.NumberFormat(locale, { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(value);
 
   const cropDisplay =
     lang === 'en' ? CROP_NAMES_EN[parcelInfo.cropId] || parcelInfo.cropNamePl : parcelInfo.cropNamePl;
 
-  const rainMax = Math.max(metrics.precip90dMm, metrics.precip10yrAvg90dMm ?? 0, 1);
-  const rainActualPct = Math.min(100, Math.round((metrics.precip90dMm / rainMax) * 100));
-  const rainNormPct =
-    metrics.precip10yrAvg90dMm !== null
-      ? Math.min(100, Math.round((metrics.precip10yrAvg90dMm / rainMax) * 100))
-      : null;
+  const rain = metrics.precip90dMm;
+  const norm = metrics.precip10yrAvg90dMm;
+  const pctOfNorm = !isMissing(rain) && !isMissing(norm) && norm > 0 ? Math.round((rain / norm) * 100) : null;
+  const rainScaleMax = Math.max(rain ?? 0, norm ?? 0, 1) * 1.08;
+  const rainColor =
+    pctOfNorm === null ? 'var(--water-accent)' : pctOfNorm >= 90 ? '#2e7d32' : pctOfNorm >= 60 ? '#ea8a00' : '#d32f2f';
+  const droughtSeasons = isMissing(metrics.historicalDroughtYears)
+    ? null
+    : Math.max(0, Math.min(10, metrics.historicalDroughtYears));
 
-  const droughtSeasons = Math.max(0, Math.min(10, metrics.historicalDroughtYears));
+  const measures = step2_causesAndRetention.retentionRecommendationsPl;
 
   async function handleCopyLink() {
-    const shareUrl = isDemo
-      ? window.location.href
-      : `${window.location.origin}/report/${report.reportUuid}`;
+    const shareUrl = isDemo ? window.location.href : `${window.location.origin}/report/${report.reportUuid}`;
     try {
       await navigator.clipboard.writeText(shareUrl);
       setCopied(true);
@@ -84,10 +243,6 @@ export function ReportView({ t, lang, report, isDemo = false, onBack }: ReportVi
     } catch {
       window.prompt(t.copyLink, shareUrl);
     }
-  }
-
-  function handlePrint() {
-    window.print();
   }
 
   const satelliteWarning =
@@ -99,599 +254,533 @@ export function ReportView({ t, lang, report, isDemo = false, onBack }: ReportVi
           ? t.satelliteWarningError
           : null;
 
-  return (
-    <div style={{ backgroundColor: 'var(--bg-canvas)' }}>
-      {/* Clean neutral demo notice bar — no pastel yellow fill */}
-      {isDemo && (
-        <div
-          role="note"
-          className="no-print"
-          style={{
-            backgroundColor: 'var(--bg-field)',
-            borderBottom: '1px solid var(--hairline)',
-          }}
-        >
-          <div className="mx-auto flex max-w-[1120px] items-center gap-2.5 px-4 py-2 text-sm sm:px-6">
-            <Info
-              className="h-4 w-4 shrink-0"
-              style={{ color: 'var(--ink-secondary)' }}
-              strokeWidth={1.75}
-              aria-hidden="true"
-            />
-            <p style={{ color: 'var(--ink-secondary)' }}>
-              <span className="font-semibold" style={{ color: 'var(--ink-primary)' }}>
-                {t.demoBannerTitle}.
-              </span>{' '}
-              {t.demoBannerBody}
-            </p>
-          </div>
-        </div>
+  const terrainTiles: { key: string; icon: ReactNode; label: string; value: string | null; unit?: string; hint?: string; warn?: boolean }[] = [
+    {
+      key: 'sand',
+      icon: <Leaf className="h-3.5 w-3.5" />,
+      label: t.techSand,
+      value: isMissing(metrics.sandPct) ? null : fmt(metrics.sandPct, 0),
+      unit: '%',
+      hint: isMissing(metrics.sandPct) ? undefined : metrics.sandPct > 65 ? t.techSandHigh : t.techSandMedium,
+      warn: !isMissing(metrics.sandPct) && metrics.sandPct > 65,
+    },
+    {
+      key: 'slope',
+      icon: <Mountain className="h-3.5 w-3.5" />,
+      label: t.techSlope,
+      value: isMissing(metrics.slopeDeg) ? null : fmt(metrics.slopeDeg, 1),
+      unit: '°',
+      hint: isMissing(metrics.slopeDeg) ? undefined : metrics.slopeDeg > 3 ? t.techSlopeSteep : t.techSlopeFlat,
+      warn: !isMissing(metrics.slopeDeg) && metrics.slopeDeg > 3,
+    },
+    {
+      key: 'water',
+      icon: <Waves className="h-3.5 w-3.5" />,
+      label: t.techWaterDist,
+      value: isMissing(metrics.nearestWaterDistM) ? null : String(Math.round(metrics.nearestWaterDistM)),
+      unit: 'm',
+    },
+  ];
+
+  const copyButton = (className: string) => (
+    <button type="button" onClick={handleCopyLink} className={className} aria-pressed={copied}>
+      {copied ? (
+        <Check className="h-4 w-4" strokeWidth={2.5} aria-hidden="true" style={{ color: 'var(--emerald)' }} />
+      ) : (
+        <Link2 className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
       )}
+      <span>{copied ? t.linkCopied : t.copyLinkShort}</span>
+    </button>
+  );
 
-      <article className="mx-auto max-w-[1120px] px-4 py-7 sm:px-6 sm:py-10">
-        {/* Action bar */}
-        <div className="no-print mb-8 flex flex-wrap items-center justify-between gap-3">
-          <button
-            type="button"
-            onClick={onBack}
-            className="btn-ghost inline-flex min-h-[40px] items-center gap-2 rounded-lg px-3 text-sm font-semibold"
-            style={{ color: 'var(--ink-primary)' }}
-          >
-            <ArrowLeft className="h-4 w-4" strokeWidth={1.9} aria-hidden="true" />
-            <span>{t.backToSearch}</span>
-          </button>
+  const pdfButton = (className: string) => (
+    <button type="button" onClick={() => window.print()} className={className}>
+      <FileDown className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+      <span>{t.downloadPdf}</span>
+    </button>
+  );
 
-          <div className="flex flex-wrap items-center gap-2">
-            {!isDemo && (
-              <button
-                type="button"
-                onClick={handleCopyLink}
-                className="btn-ghost inline-flex min-h-[40px] items-center gap-2 rounded-lg px-3 text-sm font-semibold"
-                style={{ color: copied ? 'var(--brand-primary)' : 'var(--ink-primary)' }}
-              >
-                {copied ? (
-                  <Check className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-                ) : (
-                  <Link2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                )}
-                <span>{copied ? t.linkCopied : t.copyLink}</span>
-              </button>
-            )}
+  return (
+    <div className="relative lg:h-[calc(100vh-65px)] lg:overflow-hidden print:h-auto print:overflow-visible">
+      {/* Map canvas with the highlighted parcel */}
+      <section aria-label={t.layerMap} className="no-print relative h-[380px] sm:h-[460px] lg:absolute lg:inset-0 lg:h-full">
+        <ParcelMap
+          t={t}
+          interactive={false}
+          polygon={parcelInfo.polygonGeoJson}
+          parcelLabel={{
+            title: parcelInfo.dzialkaId,
+            subtitle: isMissing(parcelInfo.areaHa) ? undefined : `~${fmt(parcelInfo.areaHa, 2)} ha`,
+          }}
+          slopeDeg={metrics.slopeDeg}
+          defaultBaseLayer="orto"
+          defaultShowParcels
+          showViewportWater
+          overlayOffsetClass="lg:left-[556px] xl:left-[616px]"
+          reserveTopRight
+          className="h-full"
+        />
 
+        {/* Floating actions */}
+        <div className="absolute right-3 top-3 z-[500] flex flex-wrap justify-end gap-2 sm:right-4 sm:top-4">
+          {pdfButton('float-btn')}
+          {copyButton('float-btn')}
+        </div>
+      </section>
+
+      {/* Floating report sheet */}
+      <aside className="relative z-10 px-3 py-4 sm:px-6 lg:pointer-events-none lg:absolute lg:inset-y-0 lg:left-0 lg:p-5 print:static print:p-0">
+        <article className="glass-sheet panel-scroll flex flex-col gap-6 p-5 sm:p-6 lg:pointer-events-auto lg:h-full lg:w-[520px] lg:overflow-y-auto xl:w-[580px] print:h-auto print:w-full print:overflow-visible print:p-0">
+          {/* Top bar */}
+          <div className="no-print flex flex-wrap items-center justify-between gap-2">
             <button
               type="button"
-              onClick={handlePrint}
-              className="btn-primary inline-flex min-h-[40px] items-center gap-2 rounded-lg px-4 text-sm font-semibold"
+              onClick={onBack}
+              className="btn-ghost -ml-2 inline-flex min-h-[38px] items-center gap-2 rounded-xl px-2.5 text-sm font-semibold"
+              style={{ color: 'var(--ink-primary)' }}
             >
-              <Printer className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-              <span>{t.printPdf}</span>
+              <ArrowLeft className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+              <span>{t.backToSearch}</span>
             </button>
-          </div>
-        </div>
-
-        {/* Print-only header */}
-        <div className="print-only mb-4 hidden pb-3" style={{ borderBottom: '1px solid #999' }}>
-          <p className="text-lg font-bold">WodoPlon — Raport sytuacji wodnej działki rolnej</p>
-          <p className="text-xs">
-            Działka {parcelInfo.dzialkaId} · {cropDisplay} · Data analizy: {parcelInfo.targetDate}
-          </p>
-        </div>
-
-        {/* TOP SECTION: Parcel Identity + Stage 1 Verdict + Integrated Map */}
-        <section aria-labelledby="stage-1-heading">
-          <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-10">
-            <div className="min-w-0">
-              {/* Parcel identity */}
-              <div className="pb-6" style={{ borderBottom: '1px solid var(--hairline)' }}>
-                <h1
-                  className="break-words text-2xl font-bold leading-tight tracking-tight sm:text-3xl"
-                  style={{ color: 'var(--ink-primary)' }}
-                >
-                  {t.parcelLabel}{' '}
-                  <span className="tabular-nums">{parcelInfo.dzialkaId}</span>
-                </h1>
-
-                <dl className="mt-3 flex flex-wrap gap-x-7 gap-y-2 text-sm">
-                  <div>
-                    <dt className="inline" style={{ color: 'var(--ink-muted)' }}>
-                      {t.cropLabel}:{' '}
-                    </dt>
-                    <dd className="inline font-semibold" style={{ color: 'var(--ink-primary)' }}>
-                      {cropDisplay}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="inline" style={{ color: 'var(--ink-muted)' }}>
-                      {t.areaLabel}:{' '}
-                    </dt>
-                    <dd className="tabular-nums inline font-semibold" style={{ color: 'var(--ink-primary)' }}>
-                      {formatNum(parcelInfo.areaHa, 2)} ha
-                    </dd>
-                  </div>
-                  {parcelInfo.voivodeship && (
-                    <div>
-                      <dt className="inline" style={{ color: 'var(--ink-muted)' }}>
-                        {t.voivodeshipLabel}:{' '}
-                      </dt>
-                      <dd className="inline font-semibold capitalize" style={{ color: 'var(--ink-primary)' }}>
-                        {parcelInfo.voivodeship}
-                      </dd>
-                    </div>
-                  )}
-                  <div>
-                    <dt className="inline" style={{ color: 'var(--ink-muted)' }}>
-                      {t.dateLabel}:{' '}
-                    </dt>
-                    <dd className="tabular-nums inline font-semibold" style={{ color: 'var(--ink-primary)' }}>
-                      {parcelInfo.targetDate}
-                    </dd>
-                  </div>
-                </dl>
-              </div>
-
-              {/* STAGE 1 VERDICT — bare icon, zero pastel circle, crisp type */}
-              <div className="pt-6">
-                <h2
-                  id="stage-1-heading"
-                  className="text-xl font-bold tracking-tight"
-                  style={{ color: 'var(--ink-primary)' }}
-                >
-                  {t.stage1Title}
-                </h2>
-
-                <div className="mt-3 flex items-center gap-2.5">
-                  <RiskIcon
-                    className="h-5 w-5 shrink-0"
-                    style={{ color: risk.ink }}
-                    strokeWidth={2}
-                    aria-hidden="true"
-                  />
-                  <p
-                    className="text-lg font-bold leading-tight"
-                    style={{ color: risk.ink }}
-                  >
-                    {t.riskLabels[step1_diagnosis.riskLevel]}
-                  </p>
-                </div>
-
-                <p
-                  className="mt-3 max-w-[62ch] text-base leading-relaxed"
-                  style={{ color: 'var(--ink-primary)' }}
-                >
-                  {step1_diagnosis.summaryPl}
-                </p>
-                <p
-                  className="mt-2 max-w-[62ch] text-sm leading-relaxed"
-                  style={{ color: 'var(--ink-secondary)' }}
-                >
-                  {step1_diagnosis.historicalContextPl}
-                </p>
-              </div>
-            </div>
-
-            {/* Clean map frame */}
-            <div
-              className="no-print h-[280px] overflow-hidden rounded-xl lg:h-full lg:min-h-[300px]"
-              style={{ border: '1px solid var(--hairline)' }}
-            >
-              <ParcelMap
-                t={t}
-                interactive={false}
-                polygon={parcelInfo.polygonGeoJson}
-                riskLevel={step1_diagnosis.riskLevel}
-                className="h-full"
-              />
-            </div>
+            {isDemo && (
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold"
+                style={{ backgroundColor: 'var(--water-soft)', color: 'var(--water-accent)' }}
+                title={t.demoBannerBody}
+              >
+                <Info className="h-3.5 w-3.5" aria-hidden="true" />
+                {t.demoBannerTitle}
+              </span>
+            )}
           </div>
 
-          {/* DATA VISUALIZATION STRIP — pure white, hairline-divided, clean monochrome + single signal */}
-          <div
-            className="print-break-avoid mt-9 grid grid-cols-1 gap-8 py-7 md:grid-cols-3 md:gap-0 md:divide-x"
-            style={{
-              borderTop: '1px solid var(--hairline)',
-              borderBottom: '1px solid var(--hairline)',
-              borderColor: 'var(--hairline)',
-            }}
-          >
-            {/* Viz 1: Water Balance + Dry Spell */}
-            <div className="md:pr-8" style={{ borderColor: 'var(--hairline)' }}>
-              <p className="text-sm font-medium" style={{ color: 'var(--ink-secondary)' }}>
-                {t.metricBalance}
-              </p>
-              <p
-                className="tabular-nums mt-1.5 text-3xl font-bold tracking-tight"
-                style={{
-                  color: metrics.waterBalanceMm < -40 ? risk.ink : 'var(--ink-primary)',
-                }}
-              >
-                {metrics.waterBalanceMm > 0 ? '+' : ''}
-                {formatNum(metrics.waterBalanceMm, 1)}{' '}
-                <span className="text-base font-medium" style={{ color: 'var(--ink-muted)' }}>
-                  mm
-                </span>
-              </p>
-              <p className="mt-1.5 text-sm" style={{ color: 'var(--ink-secondary)' }}>
-                {metrics.waterBalanceMm < 0 ? t.metricBalanceDeficit : t.metricBalanceSurplus} ·{' '}
-                <span className="tabular-nums font-semibold" style={{ color: 'var(--ink-primary)' }}>
-                  {metrics.drySpellDays} {t.metricDays}
-                </span>{' '}
-                {t.metricDrySpell.toLowerCase()}
-              </p>
+          {/* Print-only header */}
+          <div className="print-only hidden pb-3" style={{ borderBottom: '1px solid #999' }}>
+            <p className="text-lg font-bold">WodoPlon — Raport sytuacji wodnej działki rolnej</p>
+            <p className="text-xs">
+              Działka {parcelInfo.dzialkaId}, {cropDisplay}, powierzchnia {fmt(parcelInfo.areaHa, 2)} ha, data analizy: {parcelInfo.targetDate}
+            </p>
+          </div>
+
+          {/* Parcel identity */}
+          <section>
+            <p className="text-[0.7rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--ink-muted)' }}>
+              {t.parcelLabel}
+            </p>
+            <h1 className="num break-all text-xl font-bold leading-tight sm:text-2xl" style={{ color: 'var(--ink-primary)' }}>
+              {parcelInfo.dzialkaId}
+            </h1>
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              <span className="tag" style={{ backgroundColor: 'var(--emerald-soft)', border: '1px solid #a7f3d0' }}>
+                <Wheat className="h-3.5 w-3.5" style={{ color: 'var(--emerald)' }} aria-hidden="true" />
+                {cropDisplay}
+              </span>
+              <span className="tag num" title={t.areaLabel}>
+                {isMissing(parcelInfo.areaHa) ? t.unknownValue : `${fmt(parcelInfo.areaHa, 2)} ha`}
+              </span>
+              <span className="tag" title={t.voivodeshipLabel}>
+                {parcelInfo.voivodeship ?? t.unknownValue}
+              </span>
+              <span className="tag num" title={t.dateLabel}>
+                <CalendarDays className="h-3.5 w-3.5" style={{ color: 'var(--ink-muted)' }} aria-hidden="true" />
+                {parcelInfo.targetDate}
+              </span>
             </div>
+          </section>
 
-            {/* Viz 2: Rainfall vs 10-year Normal */}
-            <div className="md:px-8" style={{ borderColor: 'var(--hairline)' }}>
-              <p className="text-sm font-medium" style={{ color: 'var(--ink-secondary)' }}>
-                {t.metricPrecip}
+          {/* STEP 1 — water status */}
+          <StepSection number={1} t={t} id="step-1" title={t.step1Title} lead={t.step1Lead}>
+            <div className="risk-hero p-4 sm:p-5" style={{ backgroundColor: risk.solid }}>
+              <p className="text-[0.7rem] font-semibold uppercase tracking-wider opacity-85">{t.deficitLevelLabel}</p>
+              <p className="mt-1 flex items-center gap-2.5 text-xl font-extrabold uppercase leading-tight tracking-wide sm:text-2xl">
+                <RiskIcon className="h-7 w-7 shrink-0" strokeWidth={2.25} aria-hidden="true" />
+                {t.riskLabels[level]}
               </p>
-              <div className="mt-3 space-y-2.5">
-                <div>
-                  <div className="flex items-baseline justify-between text-sm">
-                    <span className="tabular-nums font-bold" style={{ color: 'var(--ink-primary)' }}>
-                      {formatNum(metrics.precip90dMm, 1)} mm
-                    </span>
-                    <span className="text-xs" style={{ color: 'var(--ink-muted)' }}>
-                      90 {t.metricDays}
-                    </span>
-                  </div>
-                  <div
-                    className="mt-1 h-2 w-full overflow-hidden rounded-sm"
-                    style={{ backgroundColor: 'var(--bg-field)' }}
-                  >
-                    <div
-                      className="h-full rounded-sm"
-                      style={{
-                        width: `${rainActualPct}%`,
-                        backgroundColor: 'var(--ink-primary)',
-                      }}
-                    />
-                  </div>
-                </div>
-
-                {rainNormPct !== null && metrics.precip10yrAvg90dMm !== null && (
-                  <div>
-                    <div className="flex items-baseline justify-between text-xs">
-                      <span className="tabular-nums font-medium" style={{ color: 'var(--ink-secondary)' }}>
-                        {formatNum(metrics.precip10yrAvg90dMm, 1)} mm
-                      </span>
-                      <span style={{ color: 'var(--ink-muted)' }}>{t.metricPrecipNorm}</span>
-                    </div>
-                    <div
-                      className="mt-1 h-2 w-full overflow-hidden rounded-sm"
-                      style={{ backgroundColor: 'var(--bg-field)' }}
-                    >
-                      <div
-                        className="h-full rounded-sm"
-                        style={{
-                          width: `${rainNormPct}%`,
-                          backgroundColor: '#b3b3b3',
-                        }}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Viz 3: 10-Year Historical Drought Frequency */}
-            <div className="md:pl-8" style={{ borderColor: 'var(--hairline)' }}>
-              <p className="text-sm font-medium" style={{ color: 'var(--ink-secondary)' }}>
-                {t.metricHistory}
-              </p>
-              <p className="tabular-nums mt-1.5 text-3xl font-bold tracking-tight" style={{ color: 'var(--ink-primary)' }}>
-                {droughtSeasons}{' '}
-                <span className="text-base font-medium" style={{ color: 'var(--ink-muted)' }}>
-                  {t.metricSeasons}
-                </span>
-              </p>
-              <div
-                className="mt-3 flex items-center gap-1"
-                aria-label={`${droughtSeasons} / 10`}
-                role="img"
-              >
-                {Array.from({ length: 10 }).map((_, i) => (
-                  <span
-                    key={i}
-                    className="h-2 flex-1 rounded-xs"
-                    style={{
-                      backgroundColor: i < droughtSeasons ? risk.ink : '#e5e5e5',
-                    }}
-                  />
+              <div className="mt-4 flex gap-1.5" aria-hidden="true">
+                {LEVELS.map((l, i) => (
+                  <span key={l} className="h-1.5 flex-1 rounded-full" style={{ backgroundColor: i <= levelIdx ? '#ffffff' : 'rgba(255,255,255,0.3)' }} />
                 ))}
               </div>
             </div>
-          </div>
 
-          {/* Progressive disclosure: technical soil, terrain & satellite measurements */}
-          <div className="py-4" style={{ borderBottom: '1px solid var(--hairline)' }}>
-            <button
-              type="button"
-              onClick={() => setShowTech((v) => !v)}
-              aria-expanded={showTech}
-              className="no-print inline-flex min-h-[36px] items-center gap-1.5 text-sm font-semibold underline-offset-4 hover:underline"
-              style={{ color: 'var(--ink-secondary)' }}
-            >
-              {showTech ? (
-                <ChevronUp className="h-4 w-4" strokeWidth={1.9} aria-hidden="true" />
+            <p className="mt-4 text-[0.95rem] leading-relaxed" style={{ color: 'var(--ink-primary)' }}>
+              {step1_diagnosis.summaryPl}
+            </p>
+            {step1_diagnosis.historicalContextPl && (
+              <p className="mt-2.5 flex items-start gap-2 text-sm leading-relaxed" style={{ color: 'var(--ink-secondary)' }}>
+                <History className="mt-0.5 h-4 w-4 shrink-0" style={{ color: 'var(--ink-muted)' }} aria-hidden="true" />
+                {step1_diagnosis.historicalContextPl}
+              </p>
+            )}
+
+            {/* Rainfall vs 10-year normal */}
+            <Widget className="mt-4">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                <WidgetLabel icon={<CloudRain className="h-3.5 w-3.5" />}>{t.metricPrecip}</WidgetLabel>
+                {pctOfNorm !== null && (
+                  <span className="rounded-md px-2 py-0.5 text-xs font-bold" style={{ color: '#fff', backgroundColor: rainColor }}>
+                    <span className="num">{pctOfNorm}%</span> {t.ofNorm}
+                  </span>
+                )}
+              </div>
+              {isMissing(rain) ? (
+                <NoData t={t} />
               ) : (
-                <ChevronDown className="h-4 w-4" strokeWidth={1.9} aria-hidden="true" />
+                <>
+                  <p className="mt-1.5 text-sm" style={{ color: 'var(--ink-secondary)' }}>
+                    {t.precip90Label}:{' '}
+                    <strong className="num text-base" style={{ color: 'var(--ink-primary)' }}>
+                      {fmt(rain, 1)} mm
+                    </strong>
+                    {!isMissing(norm) && (
+                      <span className="num">
+                        {' '}
+                        ({t.normLabel} {fmt(norm, 1)} mm)
+                      </span>
+                    )}
+                  </p>
+                  <div
+                    className="relative mt-2.5 h-3 w-full overflow-visible rounded-full"
+                    style={{ backgroundColor: 'var(--bg-hover)' }}
+                    role="img"
+                    aria-label={`${fmt(rain, 1)} mm / ${isMissing(norm) ? '—' : fmt(norm, 1)} mm`}
+                  >
+                    <div
+                      className="h-full rounded-full transition-[width] duration-700"
+                      style={{ width: `${(rain / rainScaleMax) * 100}%`, backgroundColor: rainColor }}
+                    />
+                    {!isMissing(norm) && (
+                      <span
+                        aria-hidden="true"
+                        className="absolute -top-1 h-5 w-[3px] rounded-full"
+                        style={{ left: `calc(${(norm / rainScaleMax) * 100}% - 1.5px)`, backgroundColor: 'var(--ink-primary)' }}
+                        title={`${t.normLabel}`}
+                      />
+                    )}
+                  </div>
+                </>
               )}
-              <span>{showTech ? t.hideTechDetails : t.showTechDetails}</span>
-            </button>
+            </Widget>
 
-            {showTech && (
-              <dl className="mt-4 grid grid-cols-1 gap-x-8 gap-y-4 pb-2 text-sm sm:grid-cols-2 lg:grid-cols-5">
-                <div>
-                  <dt style={{ color: 'var(--ink-muted)' }}>{t.techSand}</dt>
-                  <dd className="tabular-nums mt-1 font-bold" style={{ color: 'var(--ink-primary)' }}>
-                    {metrics.sandPct !== null ? `${formatNum(metrics.sandPct, 0)}%` : t.unknownValue}
+            <div className="mt-2.5 grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+              <Widget>
+                <WidgetLabel icon={<Droplets className="h-3.5 w-3.5" />}>{t.metricBalance}</WidgetLabel>
+                {isMissing(metrics.waterBalanceMm) ? (
+                  <NoData t={t} />
+                ) : (
+                  <>
+                    <p
+                      className="num mt-1.5 text-xl font-bold"
+                      style={{ color: metrics.waterBalanceMm < 0 ? 'var(--risk-high-ink)' : 'var(--brand-primary)' }}
+                    >
+                      {metrics.waterBalanceMm > 0 ? '+' : metrics.waterBalanceMm < 0 ? '−' : ''}
+                      {fmt(Math.abs(metrics.waterBalanceMm), 1)}
+                      <span className="ml-1 text-xs font-medium" style={{ color: 'var(--ink-muted)' }}>
+                        mm
+                      </span>
+                    </p>
+                    <p className="text-[0.7rem]" style={{ color: 'var(--ink-secondary)' }}>
+                      {metrics.waterBalanceMm < 0 ? t.metricBalanceDeficit : t.metricBalanceSurplus}
+                    </p>
+                  </>
+                )}
+              </Widget>
+
+              <Widget>
+                <WidgetLabel icon={<Sun className="h-3.5 w-3.5" />}>{t.metricDrySpell}</WidgetLabel>
+                {isMissing(metrics.drySpellDays) ? (
+                  <NoData t={t} />
+                ) : (
+                  <p className="num mt-1.5 text-xl font-bold" style={{ color: metrics.drySpellDays >= 14 ? 'var(--risk-moderate-ink)' : 'var(--ink-primary)' }}>
+                    {metrics.drySpellDays}
+                    <span className="ml-1 text-xs font-medium" style={{ color: 'var(--ink-muted)' }}>
+                      {t.metricDays}
+                    </span>
+                  </p>
+                )}
+              </Widget>
+
+              <Widget>
+                <WidgetLabel icon={<History className="h-3.5 w-3.5" />}>{t.metricHistory}</WidgetLabel>
+                {droughtSeasons === null ? (
+                  <NoData t={t} />
+                ) : (
+                  <>
+                    <p className="num mt-1.5 text-xl font-bold" style={{ color: 'var(--ink-primary)' }}>
+                      {droughtSeasons}
+                      <span className="ml-1 text-xs font-medium" style={{ color: 'var(--ink-muted)' }}>
+                        / 10
+                      </span>
+                    </p>
+                    <div className="mt-1.5 flex gap-[3px]" role="img" aria-label={`${droughtSeasons} / 10`}>
+                      {Array.from({ length: 10 }).map((_, i) => (
+                        <span key={i} className="h-1.5 flex-1 rounded-sm" style={{ backgroundColor: i < droughtSeasons ? risk.solid : 'var(--bg-hover)' }} />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </Widget>
+            </div>
+
+            <h3 className="mt-5 text-[0.7rem] font-bold uppercase tracking-wider" style={{ color: 'var(--ink-muted)' }}>
+              {t.satelliteHeading}
+            </h3>
+            <div className="mt-2 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+              <IndexScale
+                t={t}
+                label="NDVI"
+                icon={<Satellite className="h-3.5 w-3.5" />}
+                value={isMissing(metrics.ndviMean) ? null : metrics.ndviMean}
+                gradient="linear-gradient(90deg, #8d6e63 0%, #d6b25e 38%, #c5d86d 55%, #4caf50 75%, #1b5e20 100%)"
+                lowWord={t.ndviScaleLow}
+                highWord={t.ndviScaleHigh}
+                fmt={fmt}
+              />
+              <IndexScale
+                t={t}
+                label="NDWI"
+                icon={<Droplets className="h-3.5 w-3.5" />}
+                value={isMissing(metrics.ndwiMean) ? null : metrics.ndwiMean}
+                gradient="linear-gradient(90deg, #c2410c 0%, #f59e0b 30%, #f1f5f9 50%, #60a5fa 70%, #1d4ed8 100%)"
+                lowWord={t.ndwiScaleLow}
+                highWord={t.ndwiScaleHigh}
+                fmt={fmt}
+              />
+            </div>
+
+            <h3 className="mt-5 text-[0.7rem] font-bold uppercase tracking-wider" style={{ color: 'var(--ink-muted)' }}>
+              {t.terrainHeading}
+            </h3>
+            <dl className="mt-2 grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+              {terrainTiles.map((tile) => (
+                <Widget key={tile.key}>
+                  <dt>
+                    <WidgetLabel icon={tile.icon}>{tile.label}</WidgetLabel>
+                  </dt>
+                  <dd>
+                    {tile.value === null ? (
+                      <NoData t={t} />
+                    ) : (
+                      <>
+                        <p className="num mt-1.5 text-xl font-bold" style={{ color: tile.warn ? 'var(--risk-moderate-ink)' : 'var(--ink-primary)' }}>
+                          {tile.value}
+                          <span className="ml-0.5 text-xs font-medium" style={{ color: 'var(--ink-muted)' }}>
+                            {tile.unit}
+                          </span>
+                        </p>
+                        {tile.hint && (
+                          <p className="text-[0.7rem] leading-snug" style={{ color: 'var(--ink-secondary)' }}>
+                            {tile.hint}
+                          </p>
+                        )}
+                      </>
+                    )}
                   </dd>
-                  {metrics.sandPct !== null && (
-                    <>
-                      <div
-                        className="mt-1.5 h-1.5 w-full overflow-hidden rounded-sm"
-                        style={{ backgroundColor: 'var(--bg-field)' }}
-                      >
-                        <div
-                          className="h-full rounded-sm"
+                </Widget>
+              ))}
+            </dl>
+          </StepSection>
+
+          {/* STEP 2 — causes and retention (always before irrigation) */}
+          <StepSection number={2} t={t} id="step-2" title={t.step2Title} lead={t.step2Lead}>
+            <h3 className="flex items-center gap-2 text-sm font-bold" style={{ color: 'var(--ink-primary)' }}>
+              <Search className="h-4 w-4" style={{ color: 'var(--risk-high-ink)' }} aria-hidden="true" />
+              {t.causesHeading}
+            </h3>
+            <ul className="mt-2.5 flex flex-col gap-2">
+              {step2_causesAndRetention.causesPl.map((cause) => (
+                <li
+                  key={cause}
+                  className="print-break-avoid rounded-lg px-3.5 py-2.5 text-sm leading-relaxed"
+                  style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--hairline)', borderLeft: '4px solid var(--risk-high-solid)', color: 'var(--ink-primary)' }}
+                >
+                  {cause}
+                </li>
+              ))}
+            </ul>
+
+            <h3 className="mt-6 flex items-center gap-2 text-sm font-bold" style={{ color: 'var(--ink-primary)' }}>
+              <Droplets className="h-4 w-4" style={{ color: 'var(--water-accent)' }} aria-hidden="true" />
+              {t.retentionHeading}
+            </h3>
+            <p className="mt-1 text-xs leading-relaxed" style={{ color: 'var(--ink-secondary)' }}>
+              {t.retentionPriorityNote}
+            </p>
+
+            {measures.length === 0 ? (
+              <p className="mt-3 rounded-lg px-3 py-2.5 text-sm" style={{ backgroundColor: 'var(--bg-hover)', color: 'var(--ink-muted)' }}>
+                {t.noMeasures}
+              </p>
+            ) : (
+              <ol className="mt-3 flex flex-col gap-2.5">
+                {measures.map((m, idx) => {
+                  const priority = priorityFor(idx, level);
+                  const ps = PRIORITY_STYLE[priority];
+                  const Icon = measureIcon(m);
+                  const landscape = m.type === 'LANDSCAPE';
+                  return (
+                    <li
+                      key={`${m.title}-${idx}`}
+                      className="print-break-avoid rise-in relative overflow-hidden rounded-xl p-4"
+                      style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--hairline)', boxShadow: 'var(--shadow-card)', animationDelay: `${idx * 60}ms` }}
+                    >
+                      <span aria-hidden="true" className="absolute inset-y-0 left-0 w-1" style={{ backgroundColor: ps.accent }} />
+                      <div className="flex items-start gap-3.5">
+                        <span
+                          aria-hidden="true"
+                          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl"
                           style={{
-                            width: `${Math.min(100, Math.max(0, metrics.sandPct))}%`,
-                            backgroundColor: 'var(--ink-primary)',
+                            backgroundColor: landscape ? 'var(--water-soft)' : 'var(--brand-soft)',
+                            color: landscape ? 'var(--water-accent)' : 'var(--brand-primary)',
                           }}
-                        />
+                        >
+                          <Icon className="h-6 w-6" strokeWidth={1.8} />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="priority-badge" style={ps.badge}>
+                              {priority === 'high' ? t.priorityHigh : priority === 'medium' ? t.priorityMedium : t.priorityLow}
+                            </span>
+                            <span className="text-[0.68rem] font-semibold" style={{ color: 'var(--ink-muted)' }}>
+                              {landscape ? t.retentionTypeLandscape : t.retentionTypeSoil}
+                            </span>
+                          </div>
+                          <p className="mt-1.5 text-[0.95rem] font-bold leading-snug" style={{ color: 'var(--ink-primary)' }}>
+                            {m.title}
+                          </p>
+                          <p className="mt-1 text-sm leading-relaxed" style={{ color: 'var(--ink-secondary)' }}>
+                            {m.description}
+                          </p>
+                        </div>
                       </div>
-                      <p className="mt-1 text-xs" style={{ color: 'var(--ink-secondary)' }}>
-                        {metrics.sandPct > 65 ? t.techSandHigh : t.techSandMedium}
-                      </p>
-                    </>
-                  )}
-                </div>
+                    </li>
+                  );
+                })}
+              </ol>
+            )}
+            <p className="mt-2.5 text-[0.7rem]" style={{ color: 'var(--ink-muted)' }}>
+              {t.priorityNote}
+            </p>
+          </StepSection>
 
-                <div>
-                  <dt style={{ color: 'var(--ink-muted)' }}>{t.techSlope}</dt>
-                  <dd className="tabular-nums mt-1 font-bold" style={{ color: 'var(--ink-primary)' }}>
-                    {metrics.slopeDeg !== null ? `${formatNum(metrics.slopeDeg, 1)}°` : t.unknownValue}
-                  </dd>
-                  {metrics.slopeDeg !== null && (
-                    <p className="mt-1 text-xs" style={{ color: 'var(--ink-secondary)' }}>
-                      {metrics.slopeDeg > 3 ? t.techSlopeSteep : t.techSlopeFlat}
+          {/* STEP 3 — irrigation, strictly after retention */}
+          <StepSection number={3} t={t} id="step-3" title={t.step3Title} lead={t.step3Lead}>
+            <p className="flex items-start gap-2 rounded-xl px-3.5 py-2.5 text-xs leading-relaxed" style={{ backgroundColor: 'var(--water-soft)', color: 'var(--ink-primary)' }}>
+              <Info className="mt-px h-4 w-4 shrink-0" style={{ color: 'var(--water-accent)' }} aria-hidden="true" />
+              {t.irrigationAfterRetention}
+            </p>
+
+            <div
+              className="mt-3 rounded-xl p-4"
+              style={{
+                backgroundColor: 'var(--bg-surface)',
+                border: `1.5px solid ${step3_irrigation.isRecommended ? 'var(--water-accent)' : 'var(--hairline)'}`,
+              }}
+            >
+              <div className="flex items-start gap-3">
+                <span
+                  aria-hidden="true"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+                  style={{
+                    backgroundColor: step3_irrigation.isRecommended ? 'var(--water-accent)' : 'var(--brand-soft)',
+                    color: step3_irrigation.isRecommended ? '#ffffff' : 'var(--brand-primary)',
+                  }}
+                >
+                  {step3_irrigation.isRecommended ? <Droplets className="h-5 w-5" strokeWidth={2} /> : <ShieldCheck className="h-5 w-5" strokeWidth={2} />}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-base font-bold leading-snug" style={{ color: 'var(--ink-primary)' }}>
+                    {step3_irrigation.isRecommended ? t.irrigationYes : t.irrigationNo}
+                  </p>
+                  <p className="mt-1.5 text-sm leading-relaxed" style={{ color: 'var(--ink-secondary)' }}>
+                    {step3_irrigation.advicePl}
+                  </p>
+                </div>
+              </div>
+
+              {step3_irrigation.isRecommended && (
+                <div className="mt-3.5 flex items-end justify-between gap-3 rounded-lg px-3.5 py-3" style={{ backgroundColor: 'var(--water-soft)' }}>
+                  <p className="text-xs font-semibold" style={{ color: 'var(--ink-secondary)' }}>
+                    {t.irrigationDoseLabel}
+                  </p>
+                  {isMissing(step3_irrigation.doseMm) ? (
+                    <NoData t={t} />
+                  ) : (
+                    <p className="num text-right text-2xl font-bold leading-none" style={{ color: 'var(--water-accent)' }}>
+                      {Math.round(step3_irrigation.doseMm)}
+                      <span className="ml-1 text-sm font-medium">mm</span>
+                      <span className="mt-1 block text-xs font-medium" style={{ color: 'var(--ink-secondary)' }}>
+                        {Math.round(step3_irrigation.doseMm * 10)} m³/ha
+                      </span>
                     </p>
                   )}
                 </div>
+              )}
+            </div>
+          </StepSection>
 
-                <div>
-                  <dt style={{ color: 'var(--ink-muted)' }}>{t.techWaterDist}</dt>
-                  <dd className="tabular-nums mt-1 font-bold" style={{ color: 'var(--ink-primary)' }}>
-                    {metrics.nearestWaterDistM !== null
-                      ? `${Math.round(metrics.nearestWaterDistM)} m`
-                      : t.unknownValue}
-                  </dd>
-                </div>
-
-                <div>
-                  <dt style={{ color: 'var(--ink-muted)' }}>{t.techNdvi}</dt>
-                  <dd className="tabular-nums mt-1 font-bold" style={{ color: 'var(--ink-primary)' }}>
-                    {metrics.ndviMean !== null ? formatNum(metrics.ndviMean, 2) : t.unknownValue}
-                  </dd>
-                </div>
-
-                <div>
-                  <dt style={{ color: 'var(--ink-muted)' }}>{t.techNdwi}</dt>
-                  <dd className="tabular-nums mt-1 font-bold" style={{ color: 'var(--ink-primary)' }}>
-                    {metrics.ndwiMean !== null ? formatNum(metrics.ndwiMean, 2) : t.unknownValue}
-                  </dd>
-                </div>
-              </dl>
+          {/* STEP 4 — sources, dates and limitations */}
+          <StepSection number={4} t={t} id="step-4" title={t.step4Title} lead={t.step4Lead}>
+            {satelliteWarning && (
+              <div role="note" className="mb-3 flex items-start gap-3 rounded-xl px-3.5 py-3 text-sm" style={{ backgroundColor: 'var(--risk-moderate-soft)' }}>
+                <CloudOff className="mt-0.5 h-5 w-5 shrink-0" style={{ color: 'var(--risk-moderate-ink)' }} strokeWidth={1.9} aria-hidden="true" />
+                <p className="font-medium leading-relaxed" style={{ color: 'var(--ink-primary)' }}>
+                  {satelliteWarning}
+                </p>
+              </div>
             )}
-          </div>
-        </section>
 
-        {/* STAGE 2: CAUSES & RETENTION MEASURES — bare monochrome icons, pure white editorial flow */}
-        <section
-          aria-labelledby="stage-2-heading"
-          className="print-break-avoid py-10"
-          style={{ borderBottom: '1px solid var(--hairline)' }}
-        >
-          <div className="max-w-[70ch]">
-            <h2
-              id="stage-2-heading"
-              className="text-xl font-bold tracking-tight"
-              style={{ color: 'var(--ink-primary)' }}
-            >
-              {t.stage2Title}
-            </h2>
-            <p className="mt-1.5 text-base leading-relaxed" style={{ color: 'var(--ink-secondary)' }}>
-              {t.retentionPriorityNote}
+            <div className="flex flex-col gap-2.5">
+              <Widget>
+                <h3 className="text-sm font-bold" style={{ color: 'var(--ink-primary)' }}>
+                  {t.sourcesHeading}
+                </h3>
+                {step4_sourcesAndLimitations.sources.length === 0 ? (
+                  <NoData t={t} />
+                ) : (
+                  <ul className="mt-2.5 space-y-1.5">
+                    {step4_sourcesAndLimitations.sources.map((src) => (
+                      <li key={src} className="flex items-start gap-2 text-[0.8rem] leading-relaxed" style={{ color: 'var(--ink-secondary)' }}>
+                        <Database className="mt-1 h-3.5 w-3.5 shrink-0" style={{ color: 'var(--ink-muted)' }} aria-hidden="true" />
+                        {src}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Widget>
+
+              <div className="rounded-xl p-3.5" style={{ backgroundColor: 'var(--risk-moderate-soft)' }}>
+                <h3 className="flex items-center gap-2 text-sm font-bold" style={{ color: 'var(--ink-primary)' }}>
+                  <TriangleAlert className="h-4 w-4" style={{ color: 'var(--risk-moderate-ink)' }} aria-hidden="true" />
+                  {t.limitationsHeading}
+                </h3>
+                {step4_sourcesAndLimitations.limitationsPl.length === 0 ? (
+                  <NoData t={t} />
+                ) : (
+                  <ul className="mt-2.5 list-disc space-y-1.5 pl-5 text-[0.8rem] leading-relaxed" style={{ color: 'var(--ink-primary)' }}>
+                    {step4_sourcesAndLimitations.limitationsPl.map((lim) => (
+                      <li key={lim}>{lim}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          </StepSection>
+
+          {/* Bottom actions (also reachable on small screens without scrolling back to the map) */}
+          <div className="no-print flex flex-col gap-2.5 border-t pt-5" style={{ borderColor: 'var(--hairline)' }}>
+            <div className="flex flex-wrap gap-2">
+              {pdfButton('btn-cta inline-flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold')}
+              {copyButton('float-btn flex-1 justify-center !shadow-none')}
+            </div>
+            <p className="text-[0.7rem]" style={{ color: 'var(--ink-muted)' }}>
+              {lang === 'pl'
+                ? 'W oknie drukowania wybierz „Zapisz jako PDF”, aby zachować raport.'
+                : 'In the print dialog choose “Save as PDF” to keep the report.'}
             </p>
           </div>
-
-          <div className="mt-8 grid grid-cols-1 gap-10 lg:grid-cols-12">
-            {/* Causes */}
-            <div className="lg:col-span-5">
-              <h3 className="text-sm font-bold" style={{ color: 'var(--ink-muted)' }}>
-                {t.causesHeading}
-              </h3>
-              <ul className="mt-4 space-y-3.5 text-base">
-                {step2_causesAndRetention.causesPl.map((cause) => (
-                  <li key={cause} className="flex items-start gap-3 leading-relaxed">
-                    <span
-                      aria-hidden="true"
-                      className="mt-2.5 h-1.5 w-1.5 shrink-0 rounded-full"
-                      style={{ backgroundColor: 'var(--ink-primary)' }}
-                    />
-                    <span style={{ color: 'var(--ink-primary)' }}>{cause}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Retention actions — bare 18px neutral icons, ZERO pastel circle backgrounds */}
-            <div className="lg:col-span-7">
-              <h3 className="text-sm font-bold" style={{ color: 'var(--ink-muted)' }}>
-                {t.retentionHeading}
-              </h3>
-              <div className="mt-4 divide-y" style={{ borderColor: 'var(--hairline)' }}>
-                {step2_causesAndRetention.retentionRecommendationsPl.map((item, idx) => {
-                  const isLandscape = item.type === 'LANDSCAPE';
-                  return (
-                    <div
-                      key={item.title}
-                      className={`flex items-start gap-3.5 ${idx === 0 ? 'pb-5' : 'py-5'} last:pb-0`}
-                      style={{ borderColor: 'var(--hairline)' }}
-                    >
-                      <span className="mt-0.5 shrink-0" style={{ color: 'var(--ink-secondary)' }} aria-hidden="true">
-                        {isLandscape ? (
-                          <Waves className="h-5 w-5" strokeWidth={1.75} />
-                        ) : (
-                          <Sprout className="h-5 w-5" strokeWidth={1.75} />
-                        )}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="text-xs font-medium" style={{ color: 'var(--ink-muted)' }}>
-                          {isLandscape ? t.retentionTypeLandscape : t.retentionTypeSoil}
-                        </p>
-                        <p className="mt-0.5 text-base font-bold" style={{ color: 'var(--ink-primary)' }}>
-                          {item.title}
-                        </p>
-                        <p
-                          className="mt-1 max-w-[62ch] text-sm leading-relaxed sm:text-base"
-                          style={{ color: 'var(--ink-secondary)' }}
-                        >
-                          {item.description}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* STAGE 3: IRRIGATION — bare icon, zero background tile */}
-        <section
-          aria-labelledby="stage-3-heading"
-          className="print-break-avoid py-10"
-          style={{ borderBottom: '1px solid var(--hairline)' }}
-        >
-          <h2 id="stage-3-heading" className="text-xl font-bold tracking-tight" style={{ color: 'var(--ink-primary)' }}>
-            {t.stage3Title}
-          </h2>
-
-          <div className="mt-4 flex flex-col justify-between gap-6 md:flex-row md:items-start">
-            <div className="flex items-start gap-3.5">
-              <span
-                className="mt-1 shrink-0"
-                style={{
-                  color: step3_irrigation.isRecommended
-                    ? 'var(--ink-primary)'
-                    : 'var(--brand-primary)',
-                }}
-                aria-hidden="true"
-              >
-                {step3_irrigation.isRecommended ? (
-                  <Droplets className="h-5 w-5" strokeWidth={1.9} />
-                ) : (
-                  <ShieldCheck className="h-5 w-5" strokeWidth={1.9} />
-                )}
-              </span>
-
-              <div className="min-w-0">
-                <p className="text-xl font-bold leading-snug" style={{ color: 'var(--ink-primary)' }}>
-                  {step3_irrigation.isRecommended ? t.irrigationYes : t.irrigationNo}
-                </p>
-                <p
-                  className="mt-2 max-w-[65ch] text-base leading-relaxed"
-                  style={{ color: 'var(--ink-secondary)' }}
-                >
-                  {step3_irrigation.advicePl}
-                </p>
-              </div>
-            </div>
-
-            {step3_irrigation.isRecommended && step3_irrigation.doseMm !== null && (
-              <div
-                className="shrink-0 pl-0 md:pl-8"
-                style={{ borderLeft: '1px solid var(--hairline)' }}
-              >
-                <p className="text-xs font-medium" style={{ color: 'var(--ink-muted)' }}>
-                  {t.irrigationDoseLabel}
-                </p>
-                <p
-                  className="tabular-nums mt-1 text-3xl font-bold tracking-tight"
-                  style={{ color: 'var(--ink-primary)' }}
-                >
-                  {Math.round(step3_irrigation.doseMm)}{' '}
-                  <span className="text-base font-medium" style={{ color: 'var(--ink-muted)' }}>
-                    mm
-                  </span>
-                </p>
-                <p className="tabular-nums text-sm" style={{ color: 'var(--ink-secondary)' }}>
-                  {Math.round(step3_irrigation.doseMm * 10)} m³/ha
-                </p>
-              </div>
-            )}
-          </div>
-        </section>
-
-        {/* STAGE 4: SOURCES & LIMITATIONS */}
-        <section aria-labelledby="stage-4-heading" className="print-break-avoid pt-10">
-          <h2 id="stage-4-heading" className="text-xl font-bold tracking-tight" style={{ color: 'var(--ink-primary)' }}>
-            {t.stage4Title}
-          </h2>
-
-          {satelliteWarning && (
-            <div
-              role="note"
-              className="mt-4 flex items-start gap-3 py-3 text-sm"
-              style={{
-                borderTop: '1px solid var(--hairline)',
-                borderBottom: '1px solid var(--hairline)',
-              }}
-            >
-              <CloudOff
-                className="mt-0.5 h-5 w-5 shrink-0"
-                style={{ color: 'var(--risk-moderate-ink)' }}
-                strokeWidth={1.75}
-                aria-hidden="true"
-              />
-              <p className="font-medium leading-relaxed" style={{ color: 'var(--ink-primary)' }}>
-                {satelliteWarning}
-              </p>
-            </div>
-          )}
-
-          <div className="mt-6 grid grid-cols-1 gap-8 md:grid-cols-2">
-            <div>
-              <h3 className="text-sm font-bold" style={{ color: 'var(--ink-muted)' }}>
-                {t.sourcesHeading}
-              </h3>
-              <ul
-                className="mt-3 list-disc space-y-2 pl-4 text-sm leading-relaxed"
-                style={{ color: 'var(--ink-secondary)' }}
-              >
-                {step4_sourcesAndLimitations.sources.map((src) => (
-                  <li key={src}>{src}</li>
-                ))}
-              </ul>
-            </div>
-
-            <div>
-              <h3 className="text-sm font-bold" style={{ color: 'var(--ink-muted)' }}>
-                {t.limitationsHeading}
-              </h3>
-              <ul
-                className="mt-3 list-disc space-y-2 pl-4 text-sm leading-relaxed"
-                style={{ color: 'var(--ink-secondary)' }}
-              >
-                {step4_sourcesAndLimitations.limitationsPl.map((lim) => (
-                  <li key={lim}>{lim}</li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </section>
-      </article>
+        </article>
+      </aside>
     </div>
   );
 }

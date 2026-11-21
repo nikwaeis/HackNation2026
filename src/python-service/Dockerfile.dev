@@ -7,7 +7,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# rasterio / shapely / pyproj ship manylinux wheels with GDAL, GEOS and PROJ bundled - no apt packages needed.
+# rasterio / shapely / pyproj ship manylinux wheels with GDAL, GEOS and PROJ bundled,
+# but the rasterio wheel links against the system libexpat, which python:3.11-slim no longer ships.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libexpat1 \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 

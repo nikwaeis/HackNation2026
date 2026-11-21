@@ -128,9 +128,14 @@ def test_b_include_terrain_false_skips_nmt(client, upstream):
 # --------------------------------------------------------------------------- (c) upstream failures / timeouts
 
 
+# ASP.NET Core waits this long for /extract-geo (appsettings PythonService:TimeoutSeconds, docs/api.md §5)
+BACKEND_TIMEOUT_S = 18.0
+
+
 def test_c_default_timeouts_are_production_safe():
     s = Settings()
-    assert 8.0 <= s.module_timeout_s <= 10.0
+    # modules run in parallel: answer well before the backend gives up, leaving ~3 s for transport + JSON
+    assert 8.0 <= s.module_timeout_s <= BACKEND_TIMEOUT_S - 3.0
     assert s.http_timeout_s < s.module_timeout_s
 
 
@@ -138,15 +143,16 @@ async def _hang(_request):
     await asyncio.sleep(120)
 
 
-def test_c_both_apis_hang_real_8s_budget(client, upstream):
-    """Real default budget: must answer in 8-10 s, not after the upstream's 70-100 s."""
+def test_c_both_apis_hang_real_budget(client, upstream):
+    """Real default budget: must answer right after the module budget, before the backend's 18 s timeout."""
     upstream.nmt = _hang
     upstream.stac = _hang
     t0 = time.monotonic()
     r = client.post("/extract-geo", json=request_body())
     elapsed = time.monotonic() - t0
     assert r.status_code == 200
-    assert 7.5 <= elapsed < 10.0, f"took {elapsed:.1f}s"
+    budget = Settings().module_timeout_s
+    assert budget - 0.5 <= elapsed < min(budget + 2.0, BACKEND_TIMEOUT_S), f"took {elapsed:.1f}s"
     j = r.json()
     assert_contract(j)
     assert j["terrain"]["status"] == "ERROR" and "timeout" in j["terrain"]["error_reason"]

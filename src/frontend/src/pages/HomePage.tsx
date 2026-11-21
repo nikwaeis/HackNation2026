@@ -1,10 +1,20 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ApiError, analyzeParcel, fetchCrops } from '../api/client';
 import { FALLBACK_CROPS, SAMPLE_DEMO_REPORT } from '../api/mockData';
+import {
+  PARCEL_ID_PATTERN,
+  UldkError,
+  fetchParcelById,
+  fetchParcelByPoint,
+  type UldkParcel,
+} from '../api/uldk';
 import type { CropResponse } from '../types/api';
 import type { Language, TranslationDict } from '../i18n/translations';
-import { ParcelForm } from '../components/ParcelForm';
+import { ParcelForm, needsTerritoryConfirmation, type ParcelLookup } from '../components/ParcelForm';
+import { assessTerritory } from '../api/territory';
+import type { FieldArea } from '../api/mapContext';
+import { labelPoint } from '../lib/geo';
 import { ParcelMap } from '../components/ParcelMap';
 import { LoadingState } from '../components/LoadingState';
 import { ErrorBanner } from '../components/ErrorBanner';
@@ -20,6 +30,14 @@ function isoDate(d: Date): string {
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
 }
+
+const IDLE_LOOKUP: ParcelLookup = { status: 'idle', source: null, parcel: null };
+
+/**
+ * Open straight on farmland (Kujawy plain near Inowrocław, kujawsko-pomorskie) instead of the whole country,
+ * so the clickable fields are visible right away; "Show all of Poland" / "My location" are on the map.
+ */
+const START_VIEW: { center: [number, number]; zoom: number } = { center: [52.718, 18.345], zoom: 15 };
 
 export function HomePage({ t, lang }: HomePageProps) {
   const navigate = useNavigate();
@@ -37,6 +55,12 @@ export function HomePage({ t, lang }: HomePageProps) {
   const [selectedPoint, setSelectedPoint] = useState<{ lat: number; lon: number } | null>(null);
   const [cropId, setCropId] = useState(FALLBACK_CROPS[0].id);
   const [targetDate, setTargetDate] = useState(maxDate);
+
+  // Parcel outline from ULDK (visual only — the analysis request is unchanged)
+  const [lookup, setLookup] = useState<ParcelLookup>(IDLE_LOOKUP);
+  const lookupAbort = useRef<AbortController | null>(null);
+  /** Farm fields (OSM) loaded for the visible map area — extra evidence for the land-type check */
+  const viewFields = useRef<FieldArea[] | null>(null);
 
   const [validationError, setValidationError] = useState<string | null>(null);
   const [apiError, setApiError] = useState<{ message: string; canDemo: boolean } | null>(null);
@@ -58,11 +82,64 @@ export function HomePage({ t, lang }: HomePageProps) {
     };
   }, [lang]);
 
+  useEffect(() => () => lookupAbort.current?.abort(), []);
+
+  function startLookup(
+    source: 'point' | 'id',
+    fetcher: (signal: AbortSignal) => Promise<UldkParcel>,
+    clickPoint?: { lat: number; lon: number },
+  ) {
+    lookupAbort.current?.abort();
+    const controller = new AbortController();
+    lookupAbort.current = controller;
+    setLookup({ status: 'loading', source, parcel: null });
+    fetcher(controller.signal)
+      .then((parcel) => {
+        if (controller.signal.aborted) return;
+        // show the ULDK boundary right away, then check what kind of land it is
+        setLookup({ status: 'found', source, parcel, territory: { status: 'checking' } });
+        const [lat, lon] = clickPoint ? [clickPoint.lat, clickPoint.lon] : labelPoint(parcel.geometry);
+        assessTerritory({ lat, lon }, viewFields.current, controller.signal)
+          .then((verdict) => {
+            if (!controller.signal.aborted) {
+              setLookup({ status: 'found', source, parcel, territory: { status: 'done', verdict } });
+            }
+          })
+          .catch(() => {
+            if (!controller.signal.aborted) {
+              setLookup({ status: 'found', source, parcel, territory: { status: 'done', verdict: { kind: 'unverified' } } });
+            }
+          });
+      })
+      .catch((err) => {
+        if (controller.signal.aborted) return;
+        const status = err instanceof UldkError && err.kind === 'NOT_FOUND' ? 'notFound' : 'unavailable';
+        setLookup({ status, source, parcel: null });
+      });
+  }
+
+  function resetLookup() {
+    lookupAbort.current?.abort();
+    setLookup(IDLE_LOOKUP);
+  }
+
+  // Typed parcel ID → outline it on the map once the ID looks complete
+  useEffect(() => {
+    const id = dzialkaId.trim();
+    if (selectedPoint || !PARCEL_ID_PATTERN.test(id)) return;
+    if (lookup.source === 'id' && lookup.parcel?.id === id) return;
+    const timer = window.setTimeout(() => startLookup('id', (signal) => fetchParcelById(id, signal)), 700);
+    return () => window.clearTimeout(timer);
+    // startLookup / lookup are intentionally not dependencies: only a new ID should trigger a lookup
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dzialkaId, selectedPoint]);
+
   function handleDzialkaChange(val: string) {
     setDzialkaId(val);
     if (val.trim().length > 0 && selectedPoint) {
       setSelectedPoint(null);
     }
+    if (lookup.status !== 'idle') resetLookup();
     setValidationError(null);
     setApiError(null);
   }
@@ -72,6 +149,17 @@ export function HomePage({ t, lang }: HomePageProps) {
     setDzialkaId('');
     setValidationError(null);
     setApiError(null);
+    startLookup('point', (signal) => fetchParcelByPoint(lat, lon, signal), { lat, lon });
+  }
+
+  function handleConfirmTerritory() {
+    setLookup((current) => ({ ...current, confirmed: true }));
+    setValidationError(null);
+  }
+
+  function handleClearPoint() {
+    setSelectedPoint(null);
+    resetLookup();
   }
 
   function openDemoReport() {
@@ -82,6 +170,10 @@ export function HomePage({ t, lang }: HomePageProps) {
     const trimmedId = dzialkaId.trim();
     if (!trimmedId && !selectedPoint) {
       setValidationError(t.errorNoLocation);
+      return;
+    }
+    if (needsTerritoryConfirmation(lookup)) {
+      setValidationError(t.errorTerritoryUnconfirmed);
       return;
     }
     if (!cropId) {
@@ -112,11 +204,12 @@ export function HomePage({ t, lang }: HomePageProps) {
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.isTimeout) {
-          setApiError({ message: t.errorTimeout, canDemo: false });
+          setApiError({ message: t.errorTimeout, canDemo: true });
         } else if (err.isNetwork) {
           setApiError({ message: t.errorNetwork, canDemo: true });
         } else {
-          setApiError({ message: err.message, canDemo: false });
+          // e.g. "Usługa ULDK GUGiK jest chwilowo niedostępna" — let the user still see a sample report
+          setApiError({ message: err.message, canDemo: err.status >= 500 });
         }
       } else {
         setApiError({ message: t.errorNetwork, canDemo: true });
@@ -131,13 +224,14 @@ export function HomePage({ t, lang }: HomePageProps) {
     void runAnalysis();
   }
 
-  if (loading) {
-    return (
-      <main id="main-content" className="px-4 py-12 sm:py-20">
-        <LoadingState t={t} />
-      </main>
-    );
-  }
+  const parcelLabel = lookup.parcel
+    ? {
+        title: lookup.parcel.id,
+        subtitle: `~${new Intl.NumberFormat(lang === 'pl' ? 'pl-PL' : 'en-GB', { maximumFractionDigits: 2 }).format(
+          lookup.parcel.areaHa,
+        )} ha${lookup.parcel.voivodeship ? ` · ${lookup.parcel.voivodeship}` : ''}`,
+      }
+    : null;
 
   return (
     <main
@@ -147,31 +241,46 @@ export function HomePage({ t, lang }: HomePageProps) {
       {/* Full-bleed interactive Poland map on desktop; top canvas on mobile */}
       <section
         aria-label={t.layerMap}
-        className="h-[340px] w-full sm:h-[400px] lg:absolute lg:inset-0 lg:h-full"
+        className="h-[380px] w-full sm:h-[440px] lg:absolute lg:inset-0 lg:h-full"
       >
         <ParcelMap
           t={t}
           interactive
           selectedPoint={selectedPoint}
           onSelectPoint={handleSelectMapPoint}
+          selectionOutline={lookup.parcel?.geometry ?? null}
+          selectionLoading={lookup.status === 'loading'}
+          parcelLabel={parcelLabel}
+          initialView={START_VIEW}
+          onViewFieldsChange={(fields) => {
+            viewFields.current = fields;
+          }}
+          selectionTone={needsTerritoryConfirmation(lookup) ? 'warn' : 'ok'}
+          defaultBaseLayer="orto"
+          defaultShowParcels
+          showViewportWater
+          overlayOffsetClass="lg:left-[480px]"
           className="h-full"
         />
       </section>
 
-      {/* Floating elevated search sheet (Setproduct map-first composition) */}
+      {/* Analysis progress floats over the map on desktop */}
+      {loading && (
+        <div className="pointer-events-none absolute inset-0 z-[450] hidden items-center justify-center pl-[460px] pr-8 lg:flex">
+          <div className="pointer-events-auto w-full max-w-md">
+            <LoadingState t={t} variant="floating" />
+          </div>
+        </div>
+      )}
+
+      {/* Floating search sheet */}
       <aside
         aria-label={t.formTitle}
-        className="relative z-10 w-full px-4 py-5 sm:px-6 lg:pointer-events-none lg:flex lg:h-full lg:max-w-[1440px] lg:items-start lg:p-5"
+        className="relative z-10 w-full px-4 py-5 sm:px-6 lg:pointer-events-none lg:absolute lg:inset-y-0 lg:left-0 lg:w-auto lg:p-5"
       >
-        <div
-          className="w-full rounded-2xl p-6 lg:pointer-events-auto lg:max-h-full lg:w-[436px] lg:overflow-y-auto"
-          style={{
-            backgroundColor: 'var(--bg-surface)',
-            boxShadow: 'var(--shadow-float)',
-          }}
-        >
+        <div className="glass-sheet panel-scroll w-full p-5 sm:p-6 lg:pointer-events-auto lg:max-h-full lg:w-[440px] lg:overflow-y-auto">
           {apiError && (
-            <div className="mb-4">
+            <div className="mb-5">
               <ErrorBanner
                 t={t}
                 message={apiError.message}
@@ -188,7 +297,8 @@ export function HomePage({ t, lang }: HomePageProps) {
             dzialkaId={dzialkaId}
             onChangeDzialkaId={handleDzialkaChange}
             selectedPoint={selectedPoint}
-            onClearPoint={() => setSelectedPoint(null)}
+            onClearPoint={handleClearPoint}
+            lookup={lookup}
             cropId={cropId}
             onChangeCropId={setCropId}
             targetDate={targetDate}
@@ -199,7 +309,14 @@ export function HomePage({ t, lang }: HomePageProps) {
             validationError={validationError}
             onSubmit={handleSubmit}
             onOpenDemo={openDemoReport}
+            onConfirmTerritory={handleConfirmTerritory}
           />
+
+          {loading && (
+            <div className="mt-5 lg:hidden">
+              <LoadingState t={t} variant="inline" />
+            </div>
+          )}
         </div>
       </aside>
     </main>

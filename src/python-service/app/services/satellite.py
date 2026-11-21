@@ -195,6 +195,36 @@ def _read_band(href: str, grid: _Grid, resampling: Resampling) -> np.ndarray:
         )
 
 
+# If more than this share of clean pixels would get a negative red reflectance after the declared offset,
+# the DNs are already harmonised and the offset must not be applied (see _effective_scale_offset).
+NEGATIVE_REFLECTANCE_MAX_SHARE = 0.05
+
+
+def _effective_scale_offset(
+    scene: "_Scene", red_dn: np.ndarray, valid: np.ndarray
+) -> dict[str, tuple[float, float]]:
+    """Scale/offset actually matching the DNs of this scene.
+
+    Earth Search v1 declares offset -0.1 (BOA_ADD_OFFSET, baseline >= 04.00) on some items whose DNs are already
+    harmonised: verified live — the same 2018 acquisition as an `_0_` (offset 0) and a `_1_` (offset -0.1) item
+    has identical DNs, and a 2026 scene had every land pixel's red DN below 1000. Applying the offset there makes
+    red reflectance negative and pins NDVI near 1.0. Land surfaces never have negative reflectance, so if the
+    declared offset would produce it for a noticeable share of clean pixels, the offset is dropped for all bands.
+    """
+    scale, offset = scene.scale_offset["red"]
+    if offset >= 0 or scale <= 0 or not valid.any():
+        return scene.scale_offset
+    threshold_dn = -offset / scale  # e.g. 1000 DN for offset -0.1
+    negative_share = float((red_dn[valid] < threshold_dn).mean())
+    if negative_share <= NEGATIVE_REFLECTANCE_MAX_SHARE:
+        return scene.scale_offset
+    log.info(
+        "%s: %.0f%% of clean red pixels below DN %g -> DNs already harmonised, ignoring offset %g",
+        scene.id, 100 * negative_share, threshold_dn, offset,
+    )
+    return {band: (sc, 0.0) if band != "scl" else (sc, off) for band, (sc, off) in scene.scale_offset.items()}
+
+
 def _reflectance(dn: np.ndarray, scale_offset: tuple[float, float]) -> np.ndarray:
     scale, offset = scale_offset  # Earth Search v1: scale 0.0001, offset -0.1 (BOA offset, baseline >= 04.00)
     return dn.astype("float64") * scale + offset
@@ -236,9 +266,10 @@ async def _compute_indices(a: _Assessment, status: str) -> SatelliteMetrics:
     valid = a.clean & (red_dn > 0) & (nir_dn > 0) & (swir_dn > 0)
     if not valid.any():
         return SatelliteMetrics.no_data(f"{a.scene.id}: clean pixels have no reflectance data")
-    red = _reflectance(red_dn, a.scene.scale_offset["red"])
-    nir = _reflectance(nir_dn, a.scene.scale_offset["nir"])
-    swir = _reflectance(swir_dn, a.scene.scale_offset["swir16"])
+    so = _effective_scale_offset(a.scene, red_dn, valid)
+    red = _reflectance(red_dn, so["red"])
+    nir = _reflectance(nir_dn, so["nir"])
+    swir = _reflectance(swir_dn, so["swir16"])
     return SatelliteMetrics(
         status=status,
         ndvi_mean=_normalized_difference(nir, red, valid),

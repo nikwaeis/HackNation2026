@@ -1,0 +1,82 @@
+name: wodoplon-dev
+
+services:
+  api:
+    build:
+      context: ./src/backend
+      dockerfile: Dockerfile.dev
+    env_file: .env
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__DefaultConnection: Host=postgres;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
+      Redis__ConnectionString: redis:6379
+      Database__RunSeed: ${DATABASE_RUNSEED:-false}
+      # appsettings.Development.json points at localhost:8000 (API run on the host);
+      # inside compose the geo-worker is reachable by its service name.
+      PythonService__BaseUrl: http://python-service:8000
+    ports:
+      - "${API_PORT:-5254}:8080"
+    volumes:
+      - ./src/backend:/src
+      # keep container bin/obj separate from host build output
+      - /src/WodoPlon.Api/bin
+      - /src/WodoPlon.Api/obj
+      - /src/WodoPlon.Domain/bin
+      - /src/WodoPlon.Domain/obj
+      - nuget:/root/.nuget/packages
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      python-service:
+        condition: service_started
+
+  postgres:
+    image: postgis/postgis:17-3.5-alpine
+    env_file: .env
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+
+  # Python FastAPI geo-worker (GUGiK NMT + Sentinel-2). Name must match PythonService__BaseUrl.
+  python-service:
+    build:
+      context: ./src/python-service
+      dockerfile: Dockerfile.dev
+    ports:
+      - "${PYTHON_SERVICE_PORT:-8000}:8000"
+    volumes:
+      - ./src/python-service:/app
+
+  # React + Vite dev server; /api is proxied to the api service (same origin, no CORS).
+  frontend:
+    build:
+      context: ./src/frontend
+      dockerfile: Dockerfile.dev
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api}
+      VITE_API_PROXY_TARGET: http://api:8080
+      VITE_USE_POLLING: "true"
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    volumes:
+      - ./src/frontend:/app
+      # keep the container's node_modules (Linux binaries) separate from the host
+      - /app/node_modules
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+  nuget:

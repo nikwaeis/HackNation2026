@@ -12,10 +12,10 @@ export function ErrorBanner({ t, message, onRetry, onOpenDemo }: ErrorBannerProp
   return (
     <div
       role="alert"
-      className="py-3"
+      className="rounded-xl px-4 py-3.5"
       style={{
-        borderTop: '1px solid var(--risk-critical-ink)',
-        borderBottom: '1px solid var(--hairline)',
+        backgroundColor: 'var(--risk-critical-soft)',
+        border: '1px solid var(--risk-critical-ink)',
       }}
     >
       <div className="flex items-start gap-3">
@@ -38,7 +38,7 @@ export function ErrorBanner({ t, message, onRetry, onOpenDemo }: ErrorBannerProp
                 <button
                   type="button"
                   onClick={onOpenDemo}
-                  className="btn-primary inline-flex min-h-[40px] items-center gap-2 rounded-lg px-4 text-sm font-semibold"
+                  className="btn-primary inline-flex min-h-[40px] items-center gap-2 rounded-xl px-4 text-sm font-semibold"
                 >
                   <Eye className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
                   <span>{t.openDemoReport}</span>
@@ -48,8 +48,8 @@ export function ErrorBanner({ t, message, onRetry, onOpenDemo }: ErrorBannerProp
                 <button
                   type="button"
                   onClick={onRetry}
-                  className="btn-ghost inline-flex min-h-[40px] items-center gap-1.5 rounded-lg px-3 text-sm font-semibold"
-                  style={{ color: 'var(--ink-primary)' }}
+                  className="chip"
+                  style={{ minHeight: 40 }}
                 >
                   <RotateCcw className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
                   <span>{t.retryButton}</span>

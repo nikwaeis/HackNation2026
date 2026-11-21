@@ -1,0 +1,126 @@
+@import 'tailwindcss';
+@import 'leaflet/dist/leaflet.css';
+
+/*
+  WodoPlon palette — "pole i woda": cool sage paper, peat-green ink,
+  ditch-water blue for actions, and a drought scale that runs field-green → ochre → red.
+*/
+@theme {
+  --font-sans: 'Atkinson Hyperlegible Next', 'Segoe UI', system-ui, sans-serif;
+  --font-display: 'Bricolage Grotesque', 'Atkinson Hyperlegible Next', system-ui, sans-serif;
+
+  --color-paper: #edf2ef;
+  --color-surface: #ffffff;
+  --color-ink: #14302a;
+  --color-muted: #566a62;
+  --color-line: #cfdbd4;
+
+  --color-water: #1d6aa3;
+  --color-water-deep: #12466f;
+  --color-water-soft: #dcebf6;
+
+  --color-field: #4c7a25;
+  --color-field-soft: #e3efd4;
+
+  --color-ochre: #a8670a;
+  --color-ochre-soft: #fbebcb;
+
+  --color-dry: #b42318;
+  --color-dry-soft: #fbe2de;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-water);
+  outline-offset: 2px;
+}
+
+/* Leaflet: keep the map under sticky UI and match the typeface */
+.leaflet-container {
+  font-family: var(--font-sans);
+  background: #dfe7e2;
+}
+.leaflet-control-layers-expanded {
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+/* "Rain-gauge" hatch for the missing part of the water balance */
+.hatch-deficit {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--color-dry-soft) 0 6px,
+    color-mix(in srgb, var(--color-dry) 22%, white) 6px 9px
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ---------- Print / PDF ---------- */
+.print-only {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm 12mm;
+  }
+  html,
+  body {
+    background: #fff !important;
+    font-size: 10.5pt;
+  }
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    box-shadow: none !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  .print-avoid-break {
+    break-inside: avoid;
+  }
+  .print-page-break {
+    break-before: page;
+  }
+  .report-root {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+  a[href]::after {
+    content: '';
+  }
+}
