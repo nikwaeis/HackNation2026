@@ -33,17 +33,20 @@ React frontend ──/api──► ASP.NET Core API ──► PostgreSQL + PostG
 | Weather (P, ET₀, Tmax, 10-year history) | Open-Meteo Archive |
 | Satellite (NDVI, NDWI) | Sentinel-2 L2A, Earth Search (via Geo-Worker) |
 | Soil (sand, clay, silt, SOC) | ISRIC SoilGrids v2.0 |
-| Hydrography (distance to rivers, ditches, lakes) | Overpass OSM, stored in PostGIS |
+| Hydrography (distance to rivers, ditches, lakes) | OpenStreetMap: Geofabrik Poland extract imported into PostGIS; Overpass API as fallback |
 
 ### How the analysis works
 
 1. **Static profile** (computed once per parcel, cached forever): boundary, area, slope, soil texture, distance to water.
 2. **Dynamic observation** (cached per parcel + date): weather window and satellite indices, fetched in parallel.
-3. **Assessment**: FAO-56 water balance (`P − Kc·ET₀`) for the selected crop, dry spells, NDWI, soil sand content
-   and number of drought years in the last 10 years → water deficit level.
+3. **Assessment**: FAO-56 water balance (`P − Kc·ET₀`) for the selected crop compared with the parcel's own
+   10-year median, dry spells, NDWI, soil sand content and number of clearly drier seasons → water deficit level.
 4. **Report**: deterministic Polish/English text templates (no LLM) with recommendations and sources.
 
-If the Geo-Worker is unavailable, the analysis still runs and marks satellite data as `NO_DATA`.
+If the Geo-Worker is unavailable, the analysis still runs and marks satellite data as `ERROR`; it is fetched again on a
+later request. Nearest water is found in the local OSM import in milliseconds; without the import it is asked from
+Overpass in the background and retried until it succeeds. Concurrent first requests for the same parcel share one set
+of external calls (HybridCache).
 
 ## API
 
@@ -58,6 +61,8 @@ Geo-Worker (internal): `GET /health`, `POST /extract-geo`. Full contracts: [`doc
 data model: [`docs/data.md`](docs/data.md), implementation plan: [`docs/plan/`](docs/plan/00-overview.md).
 
 ## Getting started
+
+**Full guide (database warm-up, production migrations, smoke test, troubleshooting): [`docs/setup.md`](docs/setup.md).**
 
 ### Requirements
 
@@ -75,6 +80,9 @@ cp .env.example .env
 
 # 3. Build and start all services
 docker compose -f docker-compose.dev.yml up -d --build
+
+# 4. Once (and monthly): import Polish OSM water for nearest-water lookups (~2 GB download)
+docker compose -f docker-compose.dev.yml run --rm osm-import
 ```
 
 Database migrations run automatically on API start in Development. Hot reload is enabled for the API, the frontend
@@ -119,6 +127,8 @@ mkdir secrets
 #   secrets/redis_password    <password>
 #   secrets/redis_connection  redis:6379,password=<password>
 docker compose -f docker-compose.prod.yml up -d --build
+# after migrations are applied (see below), once and monthly:
+docker compose -f docker-compose.prod.yml run --rm osm-import
 ```
 
 The frontend is served by nginx on port `80` and proxies `/api` to the backend; the Geo-Worker is internal only.

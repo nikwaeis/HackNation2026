@@ -1,56 +1,85 @@
-# Спецификация API, потоков данных и алгоритма расчета
+# API, Data Flow and Algorithm Specification
 
-**Проект:** Цифровой ассистент фермера (*Zatrzymaj wodę, chroń plony*)  
-**Трек:** KOWR — HackNation 2026  
-**Стек:** ASP.NET Core (Core API & Orchestrator) + Python FastAPI (Geo-Worker) + PostgreSQL/PostGIS + React/TypeScript
+**Project:** Digital water assistant for farmers (*Zatrzymaj wodę, chroń plony*)  
+**Track:** KOWR — HackNation 2026  
+**Stack:** ASP.NET Core (core API and orchestrator) + Python FastAPI (Geo-Worker) + PostgreSQL/PostGIS + Redis + React/TypeScript
 
----
-
-## 1. Архитектура и общая схема работы API
-
-Система построена по гибридной микросервисной архитектуре внутри единого `docker-compose.yml` и работает в публичном режиме без регистрации пользователей и сбора персональных данных (PII).
-
-### Распределение ответственности между сервисами
-1. **Frontend (React + TypeScript):** принимает ввод от пользователя (кадастровый номер участка или клик по карте, культуру, дату анализа), отображает интерактивную карту с WMS-слоем засухи EDO и рендерит итоговый отчет с экспортом в PDF.
-2. **Core Backend (ASP.NET Core):** выступает главным оркестратором. Принимает запросы от фронтенда, управляет кэшем в PostgreSQL/PostGIS, параллельно опрашивает текстовые/JSON API (ULDK, Open-Meteo, SoilGrids), делегирует обработку растров в Python-воркер, выполняет агрономические расчеты по алгоритму и сохраняет готовые отчеты.
-3. **Geo-Worker (Python FastAPI):** stateless-микросервис без собственной базы данных. Принимает от ASP.NET Core полигон участка (GeoJSON) и целевую дату, выполняет потоковую нарезку растровых геоданных (спутниковые снимки Sentinel-2 и цифровая модель рельефа NMT) и возвращает агрегированные числовые метрики.
-4. **Database (PostgreSQL 16 + PostGIS 3.4):** хранит справочник культур, предзагруженную гидрографию Польши, вечный кэш статических характеристик участков, кэш динамических наблюдений по датам и сгенерированные отчеты.
-
-### Целевой бюджет времени выполнения ($\le 30\text{ секунд}$)
-Чтобы уложиться в регламентный лимит 30 секунд на анализ любого участка Польши:
-* При повторном запросе по связке `(dzialka_id, target_date)` данные отдаются из PostGIS за **$< 0.2\text{ сек}$**.
-* При первом обращении к новому участку статические данные (границы, рельеф, почва, расстояние до воды) вычисляются один раз и кэшируются навсегда, а внешние запросы (Open-Meteo, SoilGrids, Python Geo-Worker) запускаются **асинхронно и параллельно** (`Task.WhenAll`), что позволяет завершить полный анализ за **7–12 секунд**.
+How to run the project: [setup.md](setup.md). Geo-Worker contract: [api_asp_net_core_python_fastapi.md](api_asp_net_core_python_fastapi.md).
+Data model: [data.md](data.md).
 
 ---
 
-## 2. Собираемые данные и внешние источники
+## 1. Architecture
 
-Система в реальном времени объединяет **5 обязательных категорий** открытых данных (без использования захардкоженных заглушек):
+The system is a small set of services in one Docker Compose file. It is public: no user accounts and no personal data (PII).
 
-| Категория | Источник / Сервис | Обработчик | Извлекаемые параметры | Режим обновления |
+### Responsibilities
+1. **Frontend (React + TypeScript):** takes the user input (cadastral parcel id or a click on the map, crop, analysis date),
+   shows an interactive map with the EDO drought WMS layer and renders the report with PDF export.
+2. **Core backend (ASP.NET Core):** the orchestrator. Receives frontend requests, manages the PostgreSQL/PostGIS cache,
+   calls the text/JSON APIs (ULDK, Open-Meteo, SoilGrids) in parallel, delegates raster work to the Python Geo-Worker,
+   runs the agronomic algorithm and stores finished reports.
+3. **Geo-Worker (Python FastAPI):** stateless service without its own database. Receives the parcel polygon (GeoJSON) and
+   the target date from ASP.NET Core, reads only the needed part of the rasters (Sentinel-2 scenes and the NMT terrain model)
+   and returns aggregated numbers.
+4. **Database (PostgreSQL 17 + PostGIS 3.5):** crop catalogue, Polish hydrography (OSM import), forever cache of static
+   parcel characteristics, per-date cache of dynamic observations, generated reports.
+5. **Redis 7:** per-client rate limiting and the shared layer of HybridCache (request coalescing). Optional: without it the
+   API keeps working (rate limiting fails open, HybridCache falls back to memory).
+
+### Time budget (≤ 30 seconds, KOWR requirement)
+* A repeated request for the same `(dzialka_id, target_date)` is served from PostGIS in **< 1 s**.
+* On the first request for a new parcel, static data (boundary, terrain, soil, distance to water) is computed once and
+  cached forever; external calls (Open-Meteo, SoilGrids, Geo-Worker) run **in parallel**. A full first analysis measured
+  **11–17 s**.
+* Concurrent first requests for the same parcel (or parcel + date, or the same map point) are coalesced through
+  HybridCache: each external API is called once.
+
+---
+
+## 2. Data and external sources
+
+The system combines **5 mandatory categories** of open data at request time (no hard-coded stubs):
+
+| Category | Source / service | Handled by | Extracted parameters | Refresh |
 | :--- | :--- | :--- | :--- | :--- |
-| **1. Пространственные (границы и рельеф)** | **ULDK GUGiK** (`uldk.gugik.gov.pl`) и **Geoportal.gov.pl** (WCS NMT) | ASP.NET (границы) + Python (рельеф) | Полигон участка (WKT/GeoJSON), воеводство, площадь (га), средний и максимальный уклон ($^\circ$), доля площади со склоном $> 3^\circ$. | Статичный кэш в PostGIS (`TTL =` $\infty$) |
-| **2. Метеорологические** | **Open-Meteo Archive API** (`archive-api.open-meteo.com`) | ASP.NET Core | Ежедневные осадки ($P$, мм), эталонная эвапотранспирация ($ET_0$, мм), макс. температура ($^\circ\text{C}$) за окно 90 дней и за **10 лет** до `targetDate`. | Live при первом запросе, затем кэш по `(dzialka_id, target_date)` |
-| **3. Спутниковые** | **Sentinel-2 L2A Earth Search** (`earth-search.aws.element84.com/v1`) | Python FastAPI | Каналы B04 (Red), B08 (NIR), B11 (SWIR1) и маска облаков SCL в окне $\pm 15\text{ дней}$ от `targetDate`. Расчет средних **NDVI** и **NDWI**. | Live при первом запросе, затем кэш по `(dzialka_id, target_date)` |
-| **4. Почвенные** | **ISRIC SoilGrids v2.0** (`rest.isric.org/soilgrids/v2.0`) | ASP.NET Core | Доля песка (`sand`), глины (`clay`), ила (`silt`) и органического углерода (`soc`, г/кг) в слое 0–30 см. | Статичный кэш в PostGIS (`TTL =` $\infty$) |
-| **5. Гидрологические** | **Hydroportal (ISOK) / Wody Polskie / OSM** + **Copernicus EDO WMS** | PostGIS + Frontend | Расстояние (`ST_Distance`, м) до ближайшей реки, мелиоративной канавы (`ditch`), озера или болота; фоновый слой засухи EDO на карте. | Предзагруженный слой в PostGIS + Live WMS на карте |
+| **1. Spatial (boundaries and terrain)** | **ULDK GUGiK** (`uldk.gugik.gov.pl`) and **Geoportal.gov.pl** (NMT WCS) | ASP.NET (boundaries) + Python (terrain) | Parcel polygon, voivodeship, area (ha), mean and max slope (°), share of area with slope > 3°. | Static cache in PostGIS (forever) |
+| **2. Weather** | **Open-Meteo Archive API** (`archive-api.open-meteo.com`) | ASP.NET Core | Daily precipitation (P, mm) and reference evapotranspiration (ET₀, mm) for the 90-day window and the same window in each of the **10 previous years**. | Live on first request, then cached per `(dzialka_id, target_date)` |
+| **3. Satellite** | **Sentinel-2 L2A, Earth Search** (`earth-search.aws.element84.com/v1`) | Python FastAPI | Bands B04 (red), B08 (NIR), B11 (SWIR1) and the SCL cloud mask within ±15 days of `targetDate`; mean **NDVI** and **NDWI**. | Live on first request, then cached per `(dzialka_id, target_date)`; failed fetches are retried |
+| **4. Soil** | **ISRIC SoilGrids v2.0** (`rest.isric.org/soilgrids/v2.0`) | ASP.NET Core | Sand, clay, silt and soil organic carbon (SOC, g/kg) in the 0–30 cm layer. | Static cache in PostGIS (forever) |
+| **5. Hydrology** | **OpenStreetMap** (Geofabrik Poland extract imported into PostGIS; Overpass API as fallback) + **Copernicus EDO WMS** | PostGIS + frontend | Distance (`ST_Distance`, m) to the nearest river, drainage ditch, lake or wetland; EDO drought background layer on the map. | Monthly import into PostGIS + live WMS on the map |
+
+The official hydrography of Wody Polskie (MPHP10k WFS) and the GUGiK BDOT10k WFS were evaluated: their per-feature
+queries require a login (MPHP) or serve only whole-county archives (BDOT10k), so OSM is used.
 
 ---
 
-## 3. Спецификация внутренних API-эндпоинтов
+## 3. Public API endpoints
 
-### 3.1. Получение справочника культур
+All endpoints are under `/api`. Errors use RFC 9110 problem details; messages follow `Accept-Language` (`pl` default, `en`).
+
+| Method | Endpoint | Rate limit | Description |
+|---|---|---|---|
+| `GET` | `/api/health` | 60/min | Health check: `{"status":"ok"}` |
+| `GET` | `/api/crops` | 60/min | Crop catalogue |
+| `POST` | `/api/analyze` | 10/min per client fingerprint, 30/min per IP | Analyze a parcel |
+| `GET` | `/api/reports/{reportUuid}` | 60/min | Saved report (shareable link) |
+
+Exceeding a limit returns `429 Too Many Requests` with a `Retry-After` header. Invalid requests (`400` from validation)
+do not count against the limit.
+
+### 3.1. Crop catalogue
 `GET /api/crops`  
-Возвращает список поддерживаемых сельскохозяйственных культур с их агрономическими параметрами (по методике FAO-56) для выпадающего списка на фронтенде.
+Returns the supported crops with their FAO-56 parameters for the frontend drop-down.
 
-**Пример ответа (`200 OK`):**
+**Response example (`200 OK`):**
 ```json
 [
   {
     "id": "winter_wheat",
     "namePl": "Pszenica ozima",
     "kcMid": 1.15,
-    "criticalMonths": [5, 6, 7],
+    "criticalMonths": [5, 6],
     "rootDepthCm": 120
   },
   {
@@ -58,16 +87,17 @@
     "namePl": "Kukurydza",
     "kcMid": 1.20,
     "criticalMonths": [6, 7, 8],
-    "rootDepthCm": 100
+    "rootDepthCm": 130
   }
 ]
 ```
 
-### 3.2. Запуск анализа участка (Главный эндпоинт)
+### 3.2. Analyze a parcel (main endpoint)
 `POST /api/analyze`  
-Принимает кадастровый идентификатор ИЛИ географические координаты клика, выбранную культуру и целевую дату анализа (сегодня или любую дату за последние 10 лет).
+Takes a cadastral parcel id OR the coordinates of a map click, the crop and the analysis date (today or any date in the
+last 10 years).
 
-**Тело запроса (`Request JSON`):**
+**Request:**
 ```json
 {
   "dzialkaId": "040101_1.0001.123/4",
@@ -77,10 +107,10 @@
   "targetDate": "2026-07-15"
 }
 ```
-*(Примечание: если пользователь кликнул по карте, `dzialkaId` передается как `null`, а `lat` и `lon` заполняются координатами WGS84).*
+*(For a map click `dzialkaId` is `null` and `lat` / `lon` hold WGS 84 coordinates.)*
 
-**Тело ответа (`200 OK`):**
-Структура строго соответствует обязательной последовательности этапов KOWR:
+**Response (`200 OK`)** — the structure follows the mandatory KOWR order of steps. Text fields keep the `*Pl` suffix for
+contract compatibility, but their language follows `Accept-Language` (`pl` or `en`):
 ```json
 {
   "reportUuid": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
@@ -92,32 +122,33 @@
     "cropNamePl": "Pszenica ozima",
     "targetDate": "2026-07-15",
     "polygonGeoJson": {
-      "type": "Polygon",
-      "coordinates": [[[18.007, 53.123], [18.009, 53.123], [18.009, 53.125], [18.007, 53.123]]]
+      "type": "MultiPolygon",
+      "coordinates": [[[[18.007, 53.123], [18.009, 53.123], [18.009, 53.125], [18.007, 53.123]]]]
     }
   },
   "step1_diagnosis": {
     "riskLevel": "HIGH",
-    "summaryPl": "Wysokie ryzyko suszy rolniczej. Deficyt wody wynosi 196 mm w porównaniu do potrzeb pszenicy ozimej.",
-    "historicalContextPl": "W ciągu ostatnich 10 lat niedobory wody na tej działce występowały w 6 sezonach (najczęściej maj–lipiec).",
+    "summaryPl": "Wysokie ryzyko suszy rolniczej. Bilans wodny uprawy za ostatnie 90 dni wynosi -196.6 mm wobec typowego dla tego miejsca -95.0 mm (mediana 10 lat): opady 98.4 mm wobec potrzeb uprawy 295.0 mm (Pszenica ozima).",
+    "historicalContextPl": "W ciągu ostatnich 10 lat sezony wyraźnie suchsze od typowych (bilans o ponad 50 mm gorszy od mediany) wystąpiły w tym okresie 3 razy.",
     "metrics": {
       "precip90dMm": 98.4,
       "precip10yrAvg90dMm": 182.0,
       "waterBalanceMm": -196.6,
       "drySpellDays": 24,
-      "historicalDroughtYears": 6,
+      "historicalDroughtYears": 3,
       "ndviMean": 0.41,
       "ndwiMean": -0.18,
       "slopeDeg": 4.2,
       "sandPct": 74.0,
-      "nearestWaterDistM": 85.0
+      "nearestWaterDistM": 85.0,
+      "waterBalance10yrMedianMm": -95.0
     }
   },
   "step2_causesAndRetention": {
     "causesPl": [
       "Niskie opady (98.4 mm wobec normy 182.0 mm) oraz 24 dni bez opadów.",
       "Gleba lekka, piaszczysta (74% piasku) o niskiej pojemności wodnej.",
-      "Nachylenie terenu (4.2°) przyspieszające spływ powierzchniowy."
+      "Nachylenie terenu (4.2°) przyspiesza spływ powierzchniowy."
     ],
     "retentionRecommendationsPl": [
       {
@@ -127,22 +158,25 @@
       },
       {
         "type": "SOIL",
-        "title": "Międzyplony i pozostawienie resztek pożniwnych",
-        "description": "Zwiększy zawartość próchnicy (obecnie niska: 11.2 g/kg) i ograniczy parowanie z powierzchni gleby."
+        "title": "Międzyplony i uprawa bezorkowa",
+        "description": "Międzyplony i ograniczenie orki zwiększą zawartość próchnicy (obecnie niska: 11.2 g/kg) i pojemność wodną gleby."
       }
     ]
   },
   "step3_irrigation": {
     "isRecommended": true,
-    "advicePl": "Nawadnianie interwencyjne uzasadnione w krytycznej fazie nalewania ziarna (dawka 25–30 mm), wyłącznie po wdrożeniu zabiegów ograniczających parowanie."
+    "advicePl": "Nawadnianie interwencyjne uzasadnione w krytycznym okresie wzrostu: jednorazowa dawka 24 mm (240 m³/ha), podawana rano lub wieczorem, wyłącznie po wdrożeniu zabiegów ograniczających parowanie.",
+    "doseMm": 24
   },
   "step4_sourcesAndLimitations": {
     "sources": [
       "ULDK GUGiK (granice działki ewidencyjnej)",
       "Open-Meteo Archive API (dane meteorologiczne 2016–2026)",
+      "FAO-56 (zapotrzebowanie uprawy na wodę ETc = ET0 × Kc)",
       "Sentinel-2 L2A Earth Search (zdjęcie z dnia 2026-07-12, zachmurzenie 5%)",
       "ISRIC SoilGrids v2.0 (skład granulometryczny gleby, rozdzielczość 250 m)",
-      "Geoportal NMT WCS (numeryczny model terenu)"
+      "Geoportal NMT WCS (numeryczny model terenu)",
+      "OpenStreetMap (cieki, rowy i zbiorniki wodne, stan danych na 2026-11-21)"
     ],
     "limitationsPl": [
       "Dane glebowe SoilGrids mają rozdzielczość 250 m i mogą nie uwzględniać lokalnych zabiegów agrotechnicznych.",
@@ -153,122 +187,143 @@
 }
 ```
 
-### 3.3. Получение сохраненного отчета по прямой ссылке
+`riskLevel`: `LOW` | `MODERATE` | `HIGH` | `CRITICAL`. `satelliteStatus`: `OK` | `CLOUDY_FALLBACK` | `NO_DATA` (no
+cloud-free scene) | `ERROR` (satellite service failed; asked again on a later request). Retention `type`: `LANDSCAPE` | `SOIL`.
+
+**Errors:**
+
+| Status | When |
+|---|---|
+| `400` | Validation: no parcel id and no full `lat`+`lon`, coordinates out of range, missing crop, date in the future or more than 10 years back, malformed JSON, malformed parcel id. Validation errors are keyed by the request field name (`dzialkaId`, `cropId`, `targetDate`, `lat`, `lon`). |
+| `404` | Unknown crop; parcel not found in ULDK (e.g. a click outside Poland or on water / a road) — *«Nie znaleziono działki ewidencyjnej dla wskazanej lokalizacji»*. |
+| `415` | Body is not `application/json`. |
+| `429` | Rate limit exceeded (`Retry-After`). |
+| `500` | Weather archive or ULDK unavailable (localized message, no stack trace) — the only sources without which no honest report is possible. |
+
+### 3.3. Saved report by link
 `GET /api/reports/{reportUuid}`  
-Возвращает ранее сгенерированный отчет из таблицы `saved_reports` в формате, идентичном `POST /api/analyze`. Позволяет делиться отчетом и сохранять его без регистрации.
+Returns a stored report from `saved_reports`, byte for byte identical to the `POST /api/analyze` response it came from
+(including its language). Lets users share and keep a report without an account. Unknown id or non-GUID → `404`.
 
-### 3.4. Внутренний контракт Geo-Worker (ASP.NET Core $\rightarrow$ Python FastAPI)
-`POST http://geo-worker:8000/extract-geo`
-
-**Запрос от ASP.NET Core:**
-```json
-{
-  "dzialka_id": "040101_1.0001.123/4",
-  "target_date": "2026-07-15",
-  "need_terrain": true,
-  "geometry": {
-    "type": "Polygon",
-    "coordinates": [[[18.007, 53.123], [18.009, 53.123], [18.009, 53.125], [18.007, 53.123]]]
-  }
-}
-```
-*(Флаг `need_terrain` передается как `false`, если рельеф для данного участка уже закэширован в PostGIS).*
-
-**Ответ от Python FastAPI:**
-```json
-{
-  "mean_slope_deg": 4.2,
-  "max_slope_deg": 7.8,
-  "steep_area_pct": 38.0,
-  "ndvi_mean": 0.41,
-  "ndwi_mean": -0.18,
-  "satellite_scene_date": "2026-07-12",
-  "cloud_cover_pct": 5.0,
-  "satellite_status": "OK"
-}
-```
+### 3.4. Internal Geo-Worker contract (ASP.NET Core → Python FastAPI)
+`POST http://python-service:8000/extract-geo` — see [api_asp_net_core_python_fastapi.md](api_asp_net_core_python_fastapi.md),
+section 2. In short: the request carries `dzialka_id`, `target_date`, `include_terrain` and the GeoJSON `geometry`; the
+response has a `terrain` section (slope metrics, `null` when `include_terrain=false`) and a `satellite` section (NDVI,
+NDWI, scene date, cloud cover, status). `include_terrain` is `false` when the terrain is already cached for the parcel.
 
 ---
 
-## 4. Алгоритм обработки данных и принятия решений
+## 4. Algorithm
 
-Алгоритм спроектирован на основе научных материалов KOWR (методика FAO-56, мониторинг засухи IUNG-PIB и принцип *«retain water where it falls»*).
+The algorithm follows the KOWR scientific materials (FAO-56 method, IUNG-PIB drought monitoring and the principle
+*"retain water where it falls"*).
 
-### Шаг 0. Идентификация участка и пространственная привязка
-1. Если передан `lat` и `lon`, выполняется запрос к ULDK `GetParcelByXY` для получения официального `dzialkaId`.
-2. Выполняется поиск `dzialkaId` в таблице `parcels`. Если запись отсутствует:
-   * Запрашивается WKT-геометрия в ULDK (`GetParcelById`, SRID 4326).
-   * Через PostGIS вычисляются площадь (`ST_Area(geom::geography) / 10000`) и центроид (`ST_Centroid(geom)`).
-   * Через `ST_Distance` к таблице `hydro_features` определяется расстояние в метрах и тип ближайшего водного объекта (`river`, `ditch`, `lake`, `wetland`).
+### Step 0. Parcel identification and spatial reference
+1. With `lat` and `lon`, ULDK `GetParcelByXY` returns the official `dzialkaId` (clicks on the same spot, ≈1 m, share one
+   lookup).
+2. The parcel is looked up in `parcels`. If it is missing:
+   * the geometry is fetched from ULDK (`GetParcelById`, SRID 4326);
+   * PostGIS computes the area (`ST_Area(geom::geography) / 10000`) and the centroid;
+   * the soil profile is fetched from SoilGrids;
+   * `ST_Distance` against `hydro_features` gives the distance in metres and the type of the nearest water object
+     (`River`, `Ditch`, `Lake`, `Wetland`) within 1000 m.
 
-### Шаг 1. Оценка водной ситуации (Диагноз)
-Система объединяет метеорологические, почвенные и спутниковые показатели за период $90\text{ дней}$ до `targetDate`:
+### Step 1. Water situation (diagnosis)
+Weather, soil and satellite indicators are combined for the 90 days before `targetDate`:
 
-1. **Потребность культуры во влаге ($ET_c$) по FAO-56:**
+1. **Crop water need (ETc) by FAO-56:**
    $$ET_{c,90} = \sum_{i=1}^{90} \left( ET_{0,i} \times K_c(m_i) \right)$$
-   где $ET_{0,i}$ — эталонная эвапотранспирация за $i$-й день из Open-Meteo, а $K_c(m_i)$ — коэффициент водопотребления выбранной культуры для соответствующего месяца $m_i$.
+   where $ET_{0,i}$ is the reference evapotranspiration of day $i$ from Open-Meteo and $K_c(m_i)$ is the crop coefficient
+   for month $m_i$ (mid-season value in the crop's critical months, initial before them, late after them).
 
-2. **Климатический водный баланс культуры ($WB_{90}$):**
+2. **Crop climatic water balance ($WB_{90}$):**
    $$WB_{90} = P_{90} - ET_{c,90}$$
-   где $P_{90}$ — сумма атмосферных осадков (мм) за 90 дней до `targetDate`.
+   where $P_{90}$ is the precipitation sum (mm) in the 90 days before `targetDate`.
 
-3. **Оценка доступной влагоемкости почвы ($AWC$):**
-   На основе гранулометрического состава (`sand_pct`, `clay_pct`) и содержания органического углерода (`soc`) из SoilGrids рассчитывается доступный запас влаги в корнеобитаемом слое $Z_r$ (мм):
-   * Если $\text{sand\_pct} > 65\%$ — почва классифицируется как легкая песчаная с высокой уязвимостью к засухе ($AWC \approx 70\text{–}90\text{ мм/м}$).
-   * Если $\text{clay\_pct} > 30\%$ — тяжелая связная почва ($AWC \approx 160\text{–}190\text{ мм/м}$).
-   * Дефицит гумуса ($\text{soc} < 15\text{ г/кг}$) снижает расчетный коэффициент удержания влаги на $15\%$.
+3. **Available water capacity of the soil (AWC)** from texture (`sand_pct`, `clay_pct`) and organic carbon (`soc`):
+   * $\text{sand\_pct} > 65\%$ — light sandy soil, highly vulnerable to drought (AWC ≈ 70–90 mm/m);
+   * $\text{clay\_pct} > 30\%$ — heavy soil (AWC ≈ 160–190 mm/m);
+   * low humus ($\text{soc} < 15$ g/kg) lowers the retention factor by 15%.
 
-4. **Спутниковые индексы (вычисляются в Python по пикселям внутри полигона, очищенным от облаков по маске SCL):**
+4. **Satellite indices** (computed in Python over cloud-free pixels inside the polygon, SCL mask):
    $$\text{NDVI} = \frac{B08 - B04}{B08 + B04}, \quad \text{NDWI} = \frac{B08 - B11}{B08 + B11}$$
-   * Падение $\text{NDWI} < -0.10$ в вегетационный период подтверждает водный стресс растительного покрова.
+   * $\text{NDWI} < -0.10$ in the growing season confirms water stress of the canopy.
 
-5. **Историческая уязвимость за 10 лет:**
-   Для каждого из 10 предыдущих лет вычисляется $WB_{90}^{(y)}$ за аналогичное календарное окно. Подсчитывается количество лет `historicalDroughtYears`, в которых $WB_{90}^{(y)} < -100\text{ мм}$.
+5. **10-year history:**
+   $WB_{90}^{(y)}$ is computed for the same calendar window in each of the 10 previous years. The parcel's norm is their
+   median $\widetilde{WB}_{90}$ (`waterBalance10yrMedianMm`). `historicalDroughtYears` is the number of years with
+   $WB_{90}^{(y)} - \widetilde{WB}_{90} < -50$ mm (a season clearly drier than usual for this place).
 
-6. **Классификация итогового риска (`riskLevel`):**
-   * **`CRITICAL`:** $WB_{90} < -180\text{ мм}$ И ($\text{drySpellDays} \ge 21$ ИЛИ $\text{NDWI} < -0.15$).
-   * **`HIGH`:** $WB_{90} \in [-180, -110)\text{ мм}$ ИЛИ ($WB_{90} < -90\text{ мм}$ при песчаной почве $\text{sand\_pct} > 65\%$).
-   * **`MODERATE`:** $WB_{90} \in [-110, -40)\text{ мм}$ ИЛИ `historicalDroughtYears` $\ge 5$.
-   * **`LOW`:** $WB_{90} \ge -40\text{ мм}$ и отсутствие признаков водного стресса по спутнику.
+6. **Risk level (`riskLevel`)** — hybrid scale (KOWR: tell a current drought apart from a place that is dry by climate),
+   with the anomaly $\Delta = WB_{90} - \widetilde{WB}_{90}$:
+   * **`CRITICAL`:** $WB_{90} < -180$ mm AND ($\text{drySpellDays} \ge 21$ OR $\text{NDWI} < -0.15$) — absolute threshold.
+   * **`HIGH`:** $\Delta < -50$ mm OR ($\Delta < -35$ mm on sandy soil, $\text{sand\_pct} > 65\%$) OR $WB_{90} < -180$ mm
+     without confirmation.
+   * **`MODERATE`:** $\Delta < -20$ mm OR `historicalDroughtYears` $\ge 5$ OR $\text{NDWI} < -0.10$.
+   * **`LOW`:** otherwise.
+   * With no past years in the archive, absolute thresholds are used: `HIGH` at $WB_{90} < -110$ mm (sand: $< -90$),
+     `MODERATE` at $WB_{90} < -40$ mm.
 
-### Шаг 2. Выявление причин и генерация рекомендаций по ретенции (Приоритет)
-Рекомендации формируются строго на основе сработавших триггеров причин (детерминированный движок правил + опциональная стилизация текста на польском языке):
+### Step 2. Causes and retention recommendations (priority)
+Recommendations come only from triggered causes (deterministic rule engine, texts from resource templates, no LLM):
 
-* **Триггер 1: Метеорологический дефицит** ($P_{90} < 0.75 \times P_{\text{10yr\_avg}}$ или $\text{drySpellDays} \ge 14$)
-  * *Причина:* длительный период без осадков и повышенное испарение.
-  * *Мера (Почвенная ретенция):* мульчирование и оставление пожнивных остатков (*pozostawienie resztek pożniwnych*) для снижения непродуктивного испарения с поверхности почвы.
-* **Триггер 2: Низкая влагоемкость почвы** ($\text{sand\_pct} > 65\%$ или $\text{soc} < 15\text{ г/кг}$)
-  * *Причина:* легкий гранулометрический состав и низкое содержание гумуса, вызывающие быструю инфильтрацию воды глубже корнеобитаемого слоя.
-  * *Мера (Почвенная ретенция):* посев сидератов / междуплонов (*międzyplony*), переход на безотвальную обработку почвы (*uprawa bezorkowa*) для накопления органического вещества.
-* **Триггер 3: Поверхностный сток со склона** ($\text{mean\_slope\_deg} > 3.0^\circ$ или $\text{steep\_area\_pct} > 25\%$)
-  * *Причина:* значительный уклон рельефа приводит к быстрому скатыванию ливневых осадков за пределы поля.
-  * *Мера (Ландшафтная и агротехническая ретенция):* поперечная обработка склона (*uprawa poprzeczna do stoku*), создание буферных травяных полос (*strefy buforowe*) и микроводоемов в нижней части склона.
-* **Триггер 4: Близость мелиоративной сети** ($\text{nearest\_water\_type} = \text{'ditch'}$ и $\text{nearest\_water\_dist\_m} \le 300\text{ м}$)
-  * *Причина:* осушительная канава вблизи поля ускоряет отвод грунтовых вод.
-  * *Мера (Ландшафтная ретенция):* установка регулируемых запруд / шандоров на мелиоративной канаве (*zastawki na rowach melioracyjnych*) для удержания весеннего стока.
+* **Trigger 1: weather deficit** ($P_{90} < 0.75 \times P_{\text{10yr\_avg}}$ or $\text{drySpellDays} \ge 14$)
+  * *Cause:* long period without rain and high evaporation.
+  * *Measure (soil retention):* mulching and leaving crop residues (*pozostawienie resztek pożniwnych*) to cut
+    unproductive evaporation from the soil surface.
+* **Trigger 2: low soil water capacity** ($\text{sand\_pct} > 65\%$ or $\text{soc} < 15$ g/kg)
+  * *Cause:* light texture and low humus let water drain below the root zone quickly.
+  * *Measure (soil retention):* cover crops (*międzyplony*) and no-till farming (*uprawa bezorkowa*) to build organic matter.
+* **Trigger 3: surface runoff from the slope** ($\text{mean\_slope\_deg} > 3.0°$ or $\text{steep\_area\_pct} > 25\%$)
+  * *Cause:* a steep slope makes heavy rain run off the field.
+  * *Measure (landscape and agrotechnical retention):* cross-slope tillage (*uprawa poprzeczna do stoku*), grass buffer
+    strips (*strefy buforowe*) and small ponds at the foot of the slope.
+* **Trigger 4: nearby drainage network** ($\text{nearest\_water\_type} = \text{Ditch}$ and
+  $\text{nearest\_water\_dist\_m} \le 300$ m)
+  * *Cause:* a drainage ditch next to the field speeds up groundwater outflow.
+  * *Measure (landscape retention):* adjustable weirs on the ditch (*zastawki na rowach melioracyjnych*) to hold the
+    spring runoff.
 
-### Шаг 3. Рекомендации по поливу (В последнюю очередь)
-Блок полива активируется (`isRecommended = true`) **только при одновременном выполнении трех условий**:
-1. Уровень риска засухи равен `HIGH` или `CRITICAL`.
-2. Целевая дата (`targetDate`) попадает в список критических месяцев влагопотребления данной культуры (`criticalMonths`) или $\text{NDWI} < -0.15$.
-3. Агротехнические меры ретенции не способны мгновенно компенсировать текущий дефицит.
+Landscape measures are listed before soil measures. When nothing is triggered, the report says so and suggests keeping
+the plant cover.
 
-**Расчет нормы полива:**
-$$D_{\text{irrig}} = \min\left( 35,\; \max\left( 15,\; 0.3 \times AWC_{\text{root}} \right) \right)\text{ [мм]}$$
-Система рекомендует полив в утренние или вечерние часы (для минимизации потерь на испарение) разовой нормой $20\text{–}35\text{ мм}$ ($200\text{–}350\text{ м}^3/\text{га}$). Если условия не выполнены, выставляется `isRecommended = false` с пояснением, что приоритет следует отдать мерам сохранения почвенной влаги.
+### Step 3. Irrigation advice (last resort)
+Irrigation is recommended (`isRecommended = true`) **only when all three conditions hold**:
+1. The risk level is `HIGH` or `CRITICAL`.
+2. `targetDate` falls in the crop's critical months (`criticalMonths`) or $\text{NDWI} < -0.15$.
+3. Retention measures cannot offset the current deficit right away (always true: they work over seasons).
 
-### Шаг 4. Прозрачность источников и честные ограничения
-В финальный блок отчета автоматически добавляются:
-* Точный перечень использованных API и дат актуальности данных (включая реальную дату спутникового снимка Sentinel-2 и процент облачности).
-* Динамические дисклеймеры о погрешностях:
-  * Если `satellite_status == "NO_DATA"` (100% облачность в окне $\pm 15\text{ дней}$): явное предупреждение о том, что оценка выполнена на основе метео- и почвенных моделей без спутниковой коррекции.
-  * Стандартное уведомление о пространственном разрешении глобальной почвенной сетки ISRIC SoilGrids ($250\text{ м}$) и отсутствии прямых телеметрических замеров уровня грунтовых вод на участке.
+**Dose:**
+$$D_{\text{irrig}} = \min\left( 35,\; \max\left( 15,\; 0.3 \times AWC_{\text{root}} \right) \right)\text{ [mm]}$$
+applied in the morning or evening to limit evaporation (15–35 mm, i.e. 150–350 m³/ha). Otherwise `isRecommended = false`
+with an explanation that keeping soil water comes first.
+
+### Step 4. Sources and honest limitations
+The last block of the report always lists:
+* the APIs used and the data dates (including the actual Sentinel-2 scene date and cloud cover, and the OSM data date);
+* dynamic limitations, for example:
+  * `NO_DATA` (no cloud-free scene within ±15 days): the assessment uses weather and soil models without satellite correction;
+  * `ERROR` (satellite service unavailable): same, and the data will be fetched again on the next analysis;
+  * missing soil, terrain or water data, the weather archive delay for the last days;
+  * the 250 m resolution of SoilGrids and the absence of groundwater measurements on the parcel.
 
 ---
 
-## 5. Обработка сбоев и отказоустойчивость
+## 5. Failure handling and resilience
 
-Чтобы прототип гарантированно проходил тестирование жюри на любых участках Польши и исторических датах:
-1. **Таймауты внешних API:** на каждый внешний HTTP-запрос установлен жесткий таймаут ($8\text{ сек}$ для текстовых API, $18\text{ сек}$ для Geo-Worker).
-2. **Деградация без падения (Graceful Degradation):** если внешний сервис (например, SoilGrids или Sentinel-2) временно недоступен или не содержит данных для указанной даты/точки, ASP.NET Core не возвращает ошибку `500`, а использует базовые региональные средние значения (для почвы) или пропускает спутниковый коэффициент, обязательно фиксируя этот факт в массиве `limitationsPl`.
-3. **Валидация координат:** если клик пользователя пришелся на территорию за пределами Польши или на водный/городской объект без кадастрового номера в ULDK, API возвращает понятную ошибку `404 Not Found` с сообщением на польском языке (*«Nie znaleziono działki ewidencyjnej dla wskazanej lokalizacji»*).
+So that the prototype works for the jury on any Polish parcel and any date in the last 10 years:
+1. **Timeouts:** 8 s for ULDK / Open-Meteo / SoilGrids, 18 s for the Geo-Worker (its own per-module budget is 12 s; GUGiK
+   NMT gets two 5 s attempts because it sometimes hangs a single request).
+2. **Hydrography:** primary source is the OSM extract imported into `hydro_features` by `scripts/import-osm-water.sh`
+   (see [setup.md](setup.md)); the nearest water is computed synchronously and is in the first report, with the data date
+   in `sources`. Without the import, Overpass is called in the background (`HydroBackgroundService`, 30 s timeout, mirror
+   list); until water is found, `limitationsPl` says the data is still loading and the lookup is retried on the next analysis.
+3. **Request coalescing:** concurrent first requests for one parcel / parcel + date / map point share one set of external
+   calls (HybridCache). Failures are not cached.
+4. **Graceful degradation:** when an optional source (SoilGrids, Sentinel-2, NMT, Overpass) is down or has no data for
+   the date / point, the API does not return `500`; it uses average soil parameters or skips the satellite correction
+   and always states it in `limitationsPl`. Satellite `ERROR` and missing terrain are retried on later requests (at most
+   once a minute).
+5. **Coordinate validation:** a click outside Poland or on an object without a cadastral number in ULDK returns a clear
+   `404 Not Found` (*«Nie znaleziono działki ewidencyjnej dla wskazanej lokalizacji»*).
+6. **Language:** report texts follow `Accept-Language` (`pl` default, `en`); the stored report keeps its language.

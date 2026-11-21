@@ -1,16 +1,20 @@
-# План реализации API и алгоритма
+# API and Algorithm Implementation Plan
 
-Работа идёт по частям, после каждой части стоп и ревью. Контракты описаны в [../api.md](../api.md), модель данных в [../data.md](../data.md).
+The work was done in parts, with a stop and review after each part. Contracts are in [../api.md](../api.md), the data
+model in [../data.md](../data.md), how to run in [../setup.md](../setup.md).
 
-| # | Часть | Статус |
+| # | Part | Status |
 |---|---|---|
-| 1 | [Клиенты внешних API](01-external-clients.md) | готово |
-| 2 | [Участок и статичный кэш (Шаг 0)](02-parcel-static-cache.md) | готово |
-| 3 | [Динамические наблюдения (метео + спутник)](03-dynamic-observation.md) | готово |
-| 4 | [Алгоритм расчёта (Шаги 1–4)](04-algorithm.md) | готово |
-| 5 | [Эндпоинты](05-endpoints.md) | готово, ждёт ревью |
+| 1 | [External API clients](01-external-clients.md) | done |
+| 2 | [Parcel and static cache (step 0)](02-parcel-static-cache.md) | done |
+| 3 | [Dynamic observations (weather + satellite)](03-dynamic-observation.md) | done |
+| 4 | [Analysis algorithm (steps 1–4)](04-algorithm.md) | done |
+| 5 | [Endpoints](05-endpoints.md) | done |
+| 6 | [Post-hackathon test campaign and hardening](06-hardening.md) | done |
 
-Решения:
-- Python Geo-Worker пишет не бэкенд. Мы делаем только C# клиент к `/extract-geo`. Если воркер недоступен, работаем дальше со статусом `NO_DATA`.
-- Гидрографию берём live из Overpass OSM и сохраняем в `hydro_features`. Расстояние считаем через `ST_Distance`.
-- Польские тексты отчёта собираются детерминированными шаблонами, без LLM.
+Decisions:
+- The Python Geo-Worker was written by a separate team member; the backend only has a C# client for `/extract-geo`.
+  If the worker is down, the analysis still runs (satellite status `ERROR`, retried later).
+- Hydrography: originally live from Overpass OSM, stored in `hydro_features`. **Changed in part 6:** the primary source
+  is a monthly bulk import of the Geofabrik Poland extract; Overpass is the fallback. Distance is computed with `ST_Distance`.
+- Report texts are built from deterministic templates (Polish and English resources), no LLM.

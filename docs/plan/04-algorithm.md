@@ -1,31 +1,41 @@
-# Часть 4. Алгоритм (чистые static-классы и юнит-тесты)
+# Part 4. Algorithm (pure static classes and unit tests)
 
 - `WaterBalance`:
-  - ETc = Σ ET0ᵢ·Kc(mᵢ), где Kc(m) = KcMid в `CriticalMonths`, KcInitial до них, KcLate после;
+  - ETc = Σ ET₀ᵢ·Kc(mᵢ), where Kc(m) = KcMid in `CriticalMonths`, KcInitial before them, KcLate after;
   - WB90 = P90 − ETc90;
-  - drySpellDays — самая длинная серия дней с P < 1 мм;
-  - historicalDroughtYears — число лет с WB90 < −100 мм.
-- `SoilAwc`: AWC (мм/м) и AWC_root = AWC·rootDepth.
-- `RiskClassifier` → `WaterDeficitLevel` по api.md §4 п.6. Правила проверяются по порядку CRITICAL → HIGH → MODERATE → LOW.
-- `RetentionRules`: триггеры 1–4 дают причины и меры.
-- `IrrigationAdvisor`: 3 условия, D = min(35, max(15, 0.3·AWC_root)).
-- `Limitations`: SoilGrids 250 м, нет данных о грунтовых водах, `NO_DATA` со спутника, fallback-значения, задержка архива метео.
-- Вход берётся из Частей 2–3: `ParcelStaticProfile`, `DynamicObservation` (с `WindowMonths`) и `Crop`. ETc текущего окна и `historicalDroughtYears` считаются из `WindowMonths` под выбранную культуру.
+  - drySpellDays — longest run of days with P < 1 mm;
+  - historicalDroughtYears — number of years with WB90 < −100 mm (*changed in part 6, see below*).
+- `SoilAwc`: AWC (mm/m) and AWC_root = AWC·rootDepth.
+- Risk classifier → `WaterDeficitLevel` by api.md §4 item 6. Rules are checked in order CRITICAL → HIGH → MODERATE → LOW.
+- Retention rules: triggers 1–4 produce causes and measures.
+- Irrigation advisor: 3 conditions, D = min(35, max(15, 0.3·AWC_root)).
+- Limitations: SoilGrids 250 m, no groundwater data, satellite `NO_DATA`, fallback values, weather archive delay.
+- Inputs come from parts 2–3: `ParcelStaticProfile`, `DynamicObservation` (with `WindowMonths`) and `Crop`. ETc of the
+  current window and `historicalDroughtYears` are computed from `WindowMonths` for the selected crop.
 
-## Как сделано
-Всё лежит в `Features/Analysis/Shared/`. Это чистые static-функции без I/O. Точка входа: `AnalysisEngine.Assess(profile, observation, crop) → Assessment`. Record `Assessment` повторяет шаги §3.2 один в один.
+## How it was built
+Everything is in `Features/Analysis/Shared/`: pure static functions without I/O. Entry point:
+`AnalysisEngine.Assess(profile, observation, crop, text) → Assessment`. The `Assessment` record mirrors the steps of §3.2.
 
-| Файл | Что внутри |
+| File | Content |
 |---|---|
-| `WaterBalance` | Kc по месяцу, ETc, баланс, засушливые годы, `Classify` |
-| `Recommendations` | Триггеры 1–4 → причины и меры (Landscape идут первыми), полив |
-| `ReportSources` | Источники и limitations |
+| `WaterBalance` | Kc by month, ETc, balance, 10-year median, drought years, `Classify` |
+| `Recommendations` | Triggers 1–4 → causes and measures (landscape first), irrigation |
+| `ReportSources` | Sources and limitations |
+| `ReportText` | Report sentences from the `Report.*` resources in the request language |
 
-Интерпретации там, где api.md неоднозначен:
-- **Kc(месяц):** в `CriticalMonths` берётся KcMid, до них KcInitial, после KcLate.
-- **Дыра в классификации:** при WB < −180 без засухи ≥21 дня и без NDWI < −0.15 не подходит ни одно правило. Считаем такой случай HIGH, то есть HIGH = WB < −110.
-- **LOW:** требует ещё NDWI ≥ −0.10, иначе MODERATE (по §4 п.6: «отсутствие признаков водного стресса по спутнику»).
-- **Условие 3 для полива** («ретенция не компенсирует мгновенно») считается выполненным всегда: меры ретенции дают эффект за сезоны, а не за дни.
-- **Доза полива:** clamp(0.3·AWC·rootDepth, 15, 35) с округлением до мм.
-- **Если ни один триггер не сработал,** всё равно выдаём одну SOIL-меру «Utrzymanie okrywy roślinnej», чтобы шаг 2 не был пустым.
-- **Числа в польских текстах** пишутся с точкой (`98.4 mm`), как в примере контракта.
+Interpretations where api.md was ambiguous:
+- **Kc(month):** KcMid in `CriticalMonths`, KcInitial before them, KcLate after.
+- **Gap in the classification:** WB < −180 without a ≥ 21-day dry spell and without NDWI < −0.15 matched no rule; it is
+  treated as HIGH.
+- **Irrigation condition 3** ("retention cannot compensate right away") is always considered met: retention measures act
+  over seasons, not days.
+- **Irrigation dose:** clamp(0.3·AWC·rootDepth, 15, 35), rounded to mm.
+- **When no trigger fires,** one SOIL measure "Utrzymanie okrywy roślinnej" (keep the plant cover) is still returned so
+  step 2 is never empty.
+- **Numbers in report texts** use a dot (`98.4 mm`), as in the contract example.
+
+**Later changes (part 6):** with absolute thresholds a typical Kujawy wheat parcel was HIGH in 7–8 of 10 years. The KOWR
+materials ask to tell a current drought apart from a place that is dry by climate, so HIGH / MODERATE and drought years
+are now measured against the parcel's own 10-year median balance; CRITICAL stays absolute (api.md §4). Texts moved to
+`SharedResources.pl.resx` / `.en.resx`.
