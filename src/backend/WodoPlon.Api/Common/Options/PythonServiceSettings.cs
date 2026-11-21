@@ -7,7 +7,7 @@ public sealed class PythonServiceSettings
     public const string SectionName = "PythonService";
 
     public string BaseUrl { get; set; } = "http://python-service:8000";
-    public int TimeoutSeconds { get; set; } = 30;
+    public int TimeoutSeconds { get; set; } = 18;
 }
 
 public sealed class PythonServiceSettingsValidation : AbstractValidator<PythonServiceSettings>

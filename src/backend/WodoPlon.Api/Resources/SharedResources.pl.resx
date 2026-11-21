@@ -22,4 +22,127 @@
     <data name="Common.UnexpectedError" xml:space="preserve">
         <value>Wystąpił nieoczekiwany błąd.</value>
     </data>
+    <data name="Vo.ParcelId.Empty" xml:space="preserve">
+        <value>Identyfikator działki nie może być pusty.</value>
+    </data>
+    <data name="Vo.ParcelId.MaxLength" xml:space="preserve">
+        <value>Identyfikator działki jest za długi (maks. {0} znaków).</value>
+    </data>
+    <data name="Vo.ParcelId.InvalidFormat" xml:space="preserve">
+        <value>Identyfikator działki musi być w formacie TERYT, np. 040101_1.0001.123/4.</value>
+    </data>
+    <data name="Vo.CropId.Empty" xml:space="preserve">
+        <value>Kod uprawy nie może być pusty.</value>
+    </data>
+    <data name="Vo.CropId.MaxLength" xml:space="preserve">
+        <value>Kod uprawy jest za długi (maks. {0} znaków).</value>
+    </data>
+    <data name="Vo.CropId.InvalidFormat" xml:space="preserve">
+        <value>Kod uprawy może zawierać tylko małe litery i podkreślenia.</value>
+    </data>
+    <data name="Vo.Percent.OutOfRange" xml:space="preserve">
+        <value>Wartość procentowa musi mieścić się w zakresie od {0} do {1}.</value>
+    </data>
+    <data name="Ent.Crop.EmptyName" xml:space="preserve">
+        <value>Nazwa uprawy nie może być pusta.</value>
+    </data>
+    <data name="Ent.Crop.NameMaxLength" xml:space="preserve">
+        <value>Nazwa uprawy jest za długa (maks. {0} znaków).</value>
+    </data>
+    <data name="Ent.Crop.CoefficientOutOfRange" xml:space="preserve">
+        <value>Współczynnik Kc musi mieścić się w zakresie od {0} do {1}.</value>
+    </data>
+    <data name="Ent.Crop.EmptyCriticalMonths" xml:space="preserve">
+        <value>Wymagany jest co najmniej jeden miesiąc krytyczny.</value>
+    </data>
+    <data name="Ent.Crop.InvalidMonth" xml:space="preserve">
+        <value>Miesiąc krytyczny musi być w zakresie od 1 do 12.</value>
+    </data>
+    <data name="Ent.Crop.InvalidRootDepth" xml:space="preserve">
+        <value>Głębokość korzeni musi być większa od zera.</value>
+    </data>
+    <data name="Ent.HydroFeature.NameMaxLength" xml:space="preserve">
+        <value>Nazwa obiektu wodnego jest za długa (maks. {0} znaków).</value>
+    </data>
+    <data name="Ent.HydroFeature.EmptyGeometry" xml:space="preserve">
+        <value>Geometria obiektu wodnego nie może być pusta.</value>
+    </data>
+    <data name="Ent.HydroFeature.InvalidSrid" xml:space="preserve">
+        <value>Geometria obiektu wodnego musi używać SRID {0}.</value>
+    </data>
+    <data name="Ent.Parcel.VoivodeshipMaxLength" xml:space="preserve">
+        <value>Nazwa województwa jest za długa (maks. {0} znaków).</value>
+    </data>
+    <data name="Ent.Parcel.InvalidArea" xml:space="preserve">
+        <value>Powierzchnia działki musi być większa od zera.</value>
+    </data>
+    <data name="Ent.Parcel.EmptyGeometry" xml:space="preserve">
+        <value>Geometria działki nie może być pusta.</value>
+    </data>
+    <data name="Ent.Parcel.InvalidSrid" xml:space="preserve">
+        <value>Geometria działki musi używać SRID {0}.</value>
+    </data>
+    <data name="Ent.ParcelStaticProfile.SlopeOutOfRange" xml:space="preserve">
+        <value>Nachylenie musi mieścić się w zakresie od {0} do {1} stopni.</value>
+    </data>
+    <data name="Ent.ParcelStaticProfile.MeanSlopeExceedsMax" xml:space="preserve">
+        <value>Średnie nachylenie nie może przekraczać maksymalnego.</value>
+    </data>
+    <data name="Ent.ParcelStaticProfile.SoilFractionsExceedTotal" xml:space="preserve">
+        <value>Suma piasku, gliny i pyłu nie może przekraczać 100%.</value>
+    </data>
+    <data name="Ent.ParcelStaticProfile.NegativeValue" xml:space="preserve">
+        <value>Wartości glebowe i wodne nie mogą być ujemne.</value>
+    </data>
+    <data name="Ent.DynamicObservation.NegativeValue" xml:space="preserve">
+        <value>Wartości pogodowe nie mogą być ujemne.</value>
+    </data>
+    <data name="Ent.DynamicObservation.InvalidWeatherMonth" xml:space="preserve">
+        <value>Miesięczne dane pogodowe są nieprawidłowe: lata wstecz od {0} do {1}, miesiąc od 1 do 12.</value>
+    </data>
+    <data name="Ent.DynamicObservation.IndexOutOfRange" xml:space="preserve">
+        <value>Indeks satelitarny musi mieścić się w zakresie od {0} do {1}.</value>
+    </data>
+    <data name="Ent.DynamicObservation.MissingSatelliteData" xml:space="preserve">
+        <value>Dla tego statusu wymagane są indeksy satelitarne i data zdjęcia.</value>
+    </data>
+    <data name="Ent.DynamicObservation.UnexpectedSatelliteData" xml:space="preserve">
+        <value>Przy braku danych wartości satelitarne muszą być puste.</value>
+    </data>
+    <data name="Ent.DynamicObservation.SceneOutOfWindow" xml:space="preserve">
+        <value>Zdjęcie satelitarne musi pochodzić z okresu {0} dni od daty analizy.</value>
+    </data>
+    <data name="Ent.SavedReport.EmptyPayload" xml:space="preserve">
+        <value>Treść raportu nie może być pusta.</value>
+    </data>
+    <data name="External.ParcelNotFound" xml:space="preserve">
+        <value>Nie znaleziono działki ewidencyjnej dla wskazanej lokalizacji.</value>
+    </data>
+    <data name="External.UldkUnavailable" xml:space="preserve">
+        <value>Usługa ULDK GUGiK jest chwilowo niedostępna. Spróbuj ponownie za chwilę.</value>
+    </data>
+    <data name="External.WeatherUnavailable" xml:space="preserve">
+        <value>Dane meteorologiczne Open-Meteo są chwilowo niedostępne. Spróbuj ponownie za chwilę.</value>
+    </data>
+    <data name="Analysis.LocationRequired" xml:space="preserve">
+        <value>Podaj numer działki ewidencyjnej albo wskaż punkt na mapie.</value>
+    </data>
+    <data name="Analysis.LatitudeOutOfRange" xml:space="preserve">
+        <value>Szerokość geograficzna musi mieścić się w zakresie od -90 do 90.</value>
+    </data>
+    <data name="Analysis.LongitudeOutOfRange" xml:space="preserve">
+        <value>Długość geograficzna musi mieścić się w zakresie od -180 do 180.</value>
+    </data>
+    <data name="Analysis.CropRequired" xml:space="preserve">
+        <value>Wybierz uprawę.</value>
+    </data>
+    <data name="Analysis.CropNotFound" xml:space="preserve">
+        <value>Nie znaleziono wybranej uprawy.</value>
+    </data>
+    <data name="Analysis.TargetDateOutOfRange" xml:space="preserve">
+        <value>Data analizy musi przypadać w ciągu ostatnich 10 lat i nie może być z przyszłości.</value>
+    </data>
+    <data name="Analysis.ReportNotFound" xml:space="preserve">
+        <value>Nie znaleziono raportu.</value>
+    </data>
 </root>

@@ -1,4 +1,3 @@
-using System.Text.Json.Serialization;
 using FluentValidation;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
@@ -8,9 +7,13 @@ using WodoPlon.Api.Common.Filters;
 using WodoPlon.Api.Common.Interface;
 using WodoPlon.Api.Common.Models;
 using WodoPlon.Api.Common.Options;
+using WodoPlon.Api.Common.Seeds;
 using WodoPlon.Api.Common.Services;
 using WodoPlon.Api.Data;
 using WodoPlon.Api.Extensions;
+using WodoPlon.Api.Features.Analysis;
+using WodoPlon.Api.Features.Analysis.Shared;
+using WodoPlon.Api.Features.Crops;
 using WodoPlon.Api.Features.Health;
 using WodoPlon.Api.Middleware;
 
@@ -27,7 +30,8 @@ builder.Services.AddOpenApi();
 
 // Db connection
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"),
+        npgsql => npgsql.UseNetTopologySuite()));
 
 // Redis + HybridCache
 var redisOptions = ConfigurationOptions.Parse(builder.Configuration.GetRequired("Redis:ConnectionString"));
@@ -45,18 +49,15 @@ builder.Services.AddValidatorsFromAssembly(typeof(Program).Assembly);
 builder.Services.AddSingleton<IUserAgentService, UserAgentService>();
 builder.Services.AddSingleton<IRateLimitService, RedisRateLimitService>();
 builder.Services.AddLocalization();
+builder.Services.AddScoped<IDataSeeder, CropSeeder>();
+builder.Services.AddScoped<ParcelProfileService>();
+builder.Services.AddScoped<ObservationService>();
 
-// enums go over the wire as names, not numbers
-builder.Services.ConfigureHttpJsonOptions(o =>
-    o.SerializerOptions.Converters.Add(new JsonStringEnumConverter(allowIntegerValues: false)));
+// enums go over the wire as "HIGH" / "NO_DATA", geometries as GeoJSON
+builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.AddApiConverters());
 
-// Typed HttpClient for Python FastAPI microservice
-builder.Services.AddHttpClient<IPythonServiceClient, PythonServiceClient>((sp, client) =>
-{
-    var settings = sp.GetRequiredService<IOptions<PythonServiceSettings>>().Value;
-    client.BaseAddress = new Uri(settings.BaseUrl);
-    client.Timeout = TimeSpan.FromSeconds(settings.TimeoutSeconds);
-});
+// Typed HttpClients: ULDK, Open-Meteo, SoilGrids, Overpass, Python geo-worker
+builder.Services.AddExternalApiClients();
 
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
@@ -115,5 +116,7 @@ var api = app.MapGroup("/api")
     .AddEndpointFilter<RateLimitFilter>();
 
 api.MapHealth();
+api.MapCrops();
+api.MapAnalysis();
 
 app.Run();
