@@ -74,7 +74,15 @@ async def _fetch_coverage(
         "HEIGHT": str(height),
         "FORMAT": "image/x-aaigrid",
     }
-    resp = await client.get(settings.nmt_wcs_url, params=params, timeout=settings.http_timeout_s)
+    # GUGiK NMT sometimes hangs one request for 40 s while the next one answers in 1.5 s: short attempts beat one long one
+    for attempt in range(1, settings.nmt_attempts + 1):
+        try:
+            resp = await client.get(settings.nmt_wcs_url, params=params, timeout=settings.nmt_attempt_timeout_s)
+            break
+        except httpx.TimeoutException:
+            if attempt == settings.nmt_attempts:
+                raise
+            log.info("GUGiK NMT attempt %d timed out, retrying", attempt)
     resp.raise_for_status()
     if not resp.content[:64].lstrip().lower().startswith(b"ncols"):
         match = _SERVICE_EXCEPTION_RE.search(resp.text)

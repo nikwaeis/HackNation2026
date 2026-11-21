@@ -14,6 +14,7 @@ import asyncio
 import datetime as dt
 import logging
 import math
+import re
 import time
 from dataclasses import dataclass
 
@@ -53,7 +54,7 @@ GDAL_ENV = {
     "GDAL_DISABLE_READDIR_ON_OPEN": "EMPTY_DIR",
     "CPL_VSIL_CURL_ALLOWED_EXTENSIONS": ".tif",
     "GDAL_HTTP_MERGE_CONSECUTIVE_RANGES": "YES",
-    "GDAL_HTTP_TIMEOUT": "7",
+    "GDAL_HTTP_TIMEOUT": "10",
     "GDAL_HTTP_MAX_RETRY": "1",
     "GDAL_HTTP_RETRY_DELAY": "0.5",
     "VSI_CACHE": "TRUE",
@@ -91,6 +92,10 @@ class _Assessment:
 
 class _SceneUnusable(Exception):
     """The scene cannot be used for this polygon; try the next one."""
+
+
+class _SceneCloudy(_SceneUnusable):
+    """Polygon fully clouded: other tiles of the same overpass see the same clouds."""
 
 
 # --------------------------------------------------------------------------- STAC
@@ -148,8 +153,12 @@ async def _search(
     resp = await client.post(f"{settings.stac_url.rstrip('/')}/search", json=body, timeout=settings.http_timeout_s)
     resp.raise_for_status()
     scenes = [s for f in resp.json().get("features", []) if (s := _parse_scene(f, ref_date))]
-    scenes.sort(key=lambda s: s.date, reverse=True)  # don't rely on the server honouring sortby
-    return scenes
+    # don't rely on the server honouring sortby; id desc puts the latest reprocessing (_1 over _0) first
+    scenes.sort(key=lambda s: (s.date, s.id), reverse=True)
+    latest: dict[str, _Scene] = {}
+    for s in scenes:
+        latest.setdefault(re.sub(r"_\d+_L2A$", "", s.id), s)  # S2A_33UYU_20260615_1_L2A -> S2A_33UYU_20260615
+    return list(latest.values())
 
 
 # --------------------------------------------------------------------------- raster
@@ -196,8 +205,10 @@ def _read_band(href: str, grid: _Grid, resampling: Resampling) -> np.ndarray:
 
 
 def _reflectance(dn: np.ndarray, scale_offset: tuple[float, float]) -> np.ndarray:
-    scale, offset = scale_offset  # Earth Search v1: scale 0.0001, offset -0.1 (BOA offset, baseline >= 04.00)
-    return dn.astype("float64") * scale + offset
+    # Earth Search v1 advertises offset -0.1, but its COGs are already harmonized (red DN ~300 over crops):
+    # applying the offset makes red negative and pins NDVI at 1.0, so only the scale is used.
+    scale, _offset = scale_offset
+    return dn.astype("float64") * scale
 
 
 def _normalized_difference(a: np.ndarray, b: np.ndarray, valid: np.ndarray) -> float | None:
@@ -221,7 +232,7 @@ async def _assess_scene(scene: _Scene, polygon_wgs84: BaseGeometry) -> _Assessme
     cloud_pct = 100.0 * float((has_data & np.isin(scl, CLOUD_SCL)).sum()) / n_data
     clean = has_data & np.isin(scl, CLEAN_SCL)
     if not clean.any():
-        raise _SceneUnusable(f"{scene.id}: no clean (SCL 4/5/6) pixels over polygon ({cloud_pct:.0f}% clouds)")
+        raise _SceneCloudy(f"{scene.id}: no clean (SCL 4/5/6) pixels over polygon ({cloud_pct:.0f}% clouds)")
     return _Assessment(scene=scene, grid=grid, clean=clean, cloud_pct=cloud_pct)
 
 
@@ -274,7 +285,12 @@ async def analyze_satellite(
     fallback: _Assessment | None = None
     reasons: list[str] = []
     inspected = 0  # scenes whose SCL was actually read (a real "cloudy / not covered" answer)
-    for scene in scenes[:MAX_SCENES]:
+    measured_dates: set[dt.date] = set()  # cloud cover already known for this overpass
+    for scene in scenes:
+        if scene.date in measured_dates:
+            continue
+        if inspected >= MAX_SCENES:
+            break
         if time.monotonic() - started > settings.module_timeout_s - SCAN_RESERVE_S:
             reasons.append("time budget exhausted")
             break
@@ -282,6 +298,8 @@ async def analyze_satellite(
             a = await _assess_scene(scene, polygon_wgs84)
         except _SceneUnusable as exc:
             inspected += 1
+            if isinstance(exc, _SceneCloudy):
+                measured_dates.add(scene.date)
             reasons.append(str(exc))
             continue
         except Exception as exc:  # noqa: BLE001 - e.g. a COG read failure; try the next scene
@@ -290,6 +308,7 @@ async def analyze_satellite(
             continue
 
         inspected += 1
+        measured_dates.add(scene.date)
         if a.cloud_pct < settings.cloud_ok_pct:
             return await _compute_indices(a, "OK")
         if a.cloud_pct <= settings.cloud_fallback_pct:

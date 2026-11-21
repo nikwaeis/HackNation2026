@@ -101,3 +101,46 @@ def test_normalized_difference_ignores_invalid_and_clips():
     valid = np.array([[True, True], [True, False]])
     # pixel (0,1): denominator 0 -> skipped; (1,1) invalid -> skipped
     assert sat._normalized_difference(a, b, valid) == round(((0.4 / 0.6) + 0.0) / 2, 4)
+
+
+def test_search_keeps_latest_reprocessing_only(monkeypatch):
+    feats = [
+        {"id": sid, "properties": {"datetime": f"{d}T10:00:00Z", "proj:epsg": 32634},
+         "assets": {b: {"href": "x"} for b in sat.BANDS}}
+        for sid, d in [("S2A_33UYU_20260615_0_L2A", "2026-06-15"), ("S2A_33UYU_20260615_1_L2A", "2026-06-15"),
+                       ("S2A_34UCD_20260615_0_L2A", "2026-06-15")]
+    ]
+
+    class Resp:
+        def raise_for_status(self): ...
+        def json(self): return {"features": feats}
+
+    class Client:
+        async def post(self, *_, **__): return Resp()
+
+    scenes = asyncio.run(sat._search(Client(), Settings(), box(0, 0, 1, 1), REF))
+    assert [s.id for s in scenes] == ["S2A_34UCD_20260615_0_L2A", "S2A_33UYU_20260615_1_L2A"]
+
+
+def test_cloudy_overpass_skips_other_tiles_same_date(monkeypatch):
+    seen = []
+    scenes = [sat._Scene(id=i, date=d, epsg=32634, hrefs={}, scale_offset={})
+              for i, d in [("T1", REF), ("T2", REF), ("T3", REF - dt.timedelta(days=2))]]
+
+    async def fake_search(*_):
+        return scenes
+
+    async def fake_assess(scene, _):
+        seen.append(scene.id)
+        if scene.id == "T1":
+            raise sat._SceneCloudy("T1: clouds")
+        return sat._Assessment(scene=scene, grid=None, clean=None, cloud_pct=1.0)
+
+    async def fake_compute(a, status):
+        return SatelliteMetrics(status=status, scene_date=a.scene.date.isoformat())
+
+    monkeypatch.setattr(sat, "_search", fake_search)
+    monkeypatch.setattr(sat, "_assess_scene", fake_assess)
+    monkeypatch.setattr(sat, "_compute_indices", fake_compute)
+    r = asyncio.run(sat.analyze_satellite(box(0, 0, 1, 1), REF, None, Settings()))
+    assert seen == ["T1", "T3"] and r.scene_date == "2026-06-13"

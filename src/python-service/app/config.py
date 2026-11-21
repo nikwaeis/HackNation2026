@@ -24,9 +24,12 @@ class Settings(BaseSettings):
     cloud_fallback_pct: float = 50.0
 
     # Hard per-module budget enforced in main.py via asyncio.wait_for.
-    module_timeout_s: float = 8.0
+    module_timeout_s: float = 12.0
     # Single outbound HTTP request timeout (must stay below module_timeout_s).
-    http_timeout_s: float = 6.5
+    http_timeout_s: float = 10.0
+    # GUGiK NMT: attempts × attempt timeout must stay below module_timeout_s.
+    nmt_attempts: int = 2
+    nmt_attempt_timeout_s: float = 5.0
 
 
 @lru_cache

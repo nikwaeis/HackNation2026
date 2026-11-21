@@ -70,8 +70,8 @@ def stac_feature(scene_id: str, date: dt.date) -> dict:
     }
 
 
-# Synthetic reflectance DNs (scale 0.0001, offset -0.1): red 0.01, nir 0.31, swir16 0.11
-DN = {"B04": 1100, "B08": 4100, "B11": 2100}
+# Synthetic harmonized DNs (scale 0.0001; the advertised offset -0.1 must be ignored): red 0.01, nir 0.31, swir16 0.11
+DN = {"B04": 100, "B08": 3100, "B11": 1100}
 EXPECTED_NDVI = round((0.31 - 0.01) / (0.31 + 0.01), 4)  # 0.9375
 EXPECTED_NDWI = round((0.31 - 0.11) / (0.31 + 0.11), 4)  # 0.4762
 

@@ -130,23 +130,38 @@ def test_b_include_terrain_false_skips_nmt(client, upstream):
 
 def test_c_default_timeouts_are_production_safe():
     s = Settings()
-    assert 8.0 <= s.module_timeout_s <= 10.0
+    # must stay well below the 18 s the API waits for the geo-worker
+    assert 10.0 <= s.module_timeout_s <= 15.0
     assert s.http_timeout_s < s.module_timeout_s
+    assert s.nmt_attempts * s.nmt_attempt_timeout_s < s.module_timeout_s
 
 
 async def _hang(_request):
     await asyncio.sleep(120)
 
 
-def test_c_both_apis_hang_real_8s_budget(client, upstream):
-    """Real default budget: must answer in 8-10 s, not after the upstream's 70-100 s."""
+def test_c_nmt_retries_after_a_hung_attempt(client, upstream):
+    """GUGiK NMT times out on one request, answers the next: terrain must still be OK."""
+
+    async def time_out_once(request):
+        # MockTransport has no network I/O, so the attempt timeout is simulated by the exception httpx raises
+        upstream.nmt = None  # the retry gets the default tilted plane
+        raise httpx.ReadTimeout("hung", request=request)
+
+    upstream.nmt = time_out_once
+    j = client.post("/extract-geo", json=request_body()).json()
+    assert j["terrain"]["status"] == "OK" and j["terrain"]["mean_slope_deg"] is not None
+
+
+def test_c_both_apis_hang_real_12s_budget(client, upstream):
+    """Real default budget: must answer in ~12 s, not after the upstream's 70-100 s."""
     upstream.nmt = _hang
     upstream.stac = _hang
     t0 = time.monotonic()
     r = client.post("/extract-geo", json=request_body())
     elapsed = time.monotonic() - t0
     assert r.status_code == 200
-    assert 7.5 <= elapsed < 10.0, f"took {elapsed:.1f}s"
+    assert 11.5 <= elapsed < 14.0, f"took {elapsed:.1f}s"
     j = r.json()
     assert_contract(j)
     assert j["terrain"]["status"] == "ERROR" and "timeout" in j["terrain"]["error_reason"]
