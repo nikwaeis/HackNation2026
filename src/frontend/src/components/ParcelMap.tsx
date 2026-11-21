@@ -194,7 +194,7 @@ export function ParcelMap({
 
       {/* Quiet non-interactive map instruction ribbon (offset on desktop for floating left form) */}
       {interactive && (
-        <div className="pointer-events-none absolute left-4 right-16 top-4 z-[400] flex justify-start lg:left-[448px]">
+        <div className="pointer-events-none absolute left-4 right-16 top-4 z-[400] flex justify-start lg:left-[472px]">
           <div
             className="rounded-full px-4 py-2 text-sm font-medium"
             style={{
@@ -210,7 +210,7 @@ export function ParcelMap({
 
       {/* Zoom hint for cadastral parcels */}
       {showParcels && zoom < 14 && (
-        <div className="pointer-events-none absolute bottom-20 left-4 right-4 z-[400] flex justify-start lg:left-[448px]">
+        <div className="pointer-events-none absolute bottom-20 left-4 right-4 z-[400] flex justify-start lg:left-[472px]">
           <div
             className="rounded-lg px-3.5 py-2 text-sm font-medium"
             style={{
@@ -258,7 +258,7 @@ export function ParcelMap({
       <div
         className={`no-print absolute z-[400] flex items-center ${
           interactive
-            ? 'bottom-5 left-4 right-4 lg:left-[448px] lg:right-auto'
+            ? 'bottom-5 left-4 right-4 lg:left-[472px] lg:right-auto'
             : 'bottom-7 left-3 right-3'
         }`}
       >

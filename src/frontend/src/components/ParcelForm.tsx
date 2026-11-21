@@ -1,4 +1,4 @@
-import { Calendar, MapPin, Search } from 'lucide-react';
+import { MapPin, Search } from 'lucide-react';
 import type { CropResponse } from '../types/api';
 import {
   CROP_NAMES_EN,
@@ -58,28 +58,40 @@ export function ParcelForm({
   ].filter((p) => p.value >= minDate && p.value <= maxDate);
 
   return (
-    <form onSubmit={onSubmit} noValidate className="space-y-5">
-      <div>
+    <form onSubmit={onSubmit} noValidate className="flex flex-col gap-5">
+      <div className="space-y-1.5">
         <h1
           className="text-xl font-bold leading-snug tracking-tight"
           style={{ color: 'var(--ink-primary)' }}
         >
           {t.formTitle}
         </h1>
-        <p className="mt-1 text-sm leading-relaxed" style={{ color: 'var(--ink-secondary)' }}>
+        <p className="text-sm leading-relaxed" style={{ color: 'var(--ink-secondary)' }}>
           {t.formLead}
         </p>
       </div>
 
       {/* Step 1: Parcel ID or Map Point */}
-      <fieldset className="m-0 space-y-2 border-0 p-0">
-        <legend className="text-sm font-bold" style={{ color: 'var(--ink-primary)' }}>
-          {t.step1Label}
-        </legend>
+      <fieldset className="flex flex-col gap-2.5 border-0 p-0">
+        <div className="flex items-baseline justify-between gap-2">
+          <legend className="p-0 text-sm font-bold" style={{ color: 'var(--ink-primary)' }}>
+            {t.step1Label}
+          </legend>
+          {!selectedPoint && (
+            <button
+              type="button"
+              onClick={() => onChangeDzialkaId(SAMPLE_PARCEL_ID)}
+              className="text-xs font-semibold underline underline-offset-4"
+              style={{ color: 'var(--ink-secondary)' }}
+            >
+              {t.trySampleParcel}
+            </button>
+          )}
+        </div>
 
         {selectedPoint ? (
           <div
-            className="flex items-center justify-between gap-3 rounded-lg px-3.5 py-2.5"
+            className="flex items-center justify-between gap-3 rounded-lg px-4 py-3"
             style={{ backgroundColor: 'var(--bg-field)' }}
           >
             <div className="flex min-w-0 items-center gap-2.5">
@@ -108,11 +120,8 @@ export function ParcelForm({
             </button>
           </div>
         ) : (
-          <div className="space-y-1.5">
-            <label
-              htmlFor="dzialka-id-input"
-              className="sr-only"
-            >
+          <div className="flex flex-col gap-2">
+            <label htmlFor="dzialka-id-input" className="sr-only">
               {t.parcelInputLabel}
             </label>
             <input
@@ -124,31 +133,23 @@ export function ParcelForm({
               value={dzialkaId}
               onChange={(e) => onChangeDzialkaId(e.target.value)}
               placeholder={t.parcelInputPlaceholder}
-              className="input-well tabular-nums h-11 w-full rounded-xl px-3.5 text-sm font-medium"
+              className="input-well tabular-nums h-11 w-full rounded-lg px-3.5 text-sm font-medium"
             />
-            <div className="flex flex-wrap items-center justify-between gap-2 pb-1 text-xs">
-              <span style={{ color: 'var(--ink-muted)' }}>{t.parcelInputHelp}</span>
-              <button
-                type="button"
-                onClick={() => onChangeDzialkaId(SAMPLE_PARCEL_ID)}
-                className="font-semibold underline underline-offset-4"
-                style={{ color: 'var(--ink-primary)' }}
-              >
-                {t.trySampleParcel}
-              </button>
-            </div>
+            <p className="text-xs leading-relaxed" style={{ color: 'var(--ink-muted)' }}>
+              {t.parcelInputHelp}
+            </p>
           </div>
         )}
       </fieldset>
 
-      {/* Step 2: Crop selection — explicit radio indicators so affordance is unmistakable */}
-      <fieldset className="m-0 space-y-2 border-0 p-0">
-        <legend className="text-sm font-bold" style={{ color: 'var(--ink-primary)' }}>
+      {/* Step 2: Crop selection */}
+      <fieldset className="flex flex-col gap-2.5 border-0 p-0">
+        <legend className="p-0 text-sm font-bold" style={{ color: 'var(--ink-primary)' }}>
           {t.step2Label}
         </legend>
 
         <div
-          className="grid grid-cols-1 gap-1.5 sm:grid-cols-2"
+          className="grid grid-cols-1 gap-2 sm:grid-cols-2"
           role="radiogroup"
           aria-label={t.step2Label}
         >
@@ -162,7 +163,7 @@ export function ParcelForm({
                 role="radio"
                 aria-checked={active}
                 onClick={() => onChangeCropId(crop.id)}
-                className="flex min-h-[42px] items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors"
+                className="flex min-h-[44px] items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-left text-sm transition-colors"
                 style={{
                   backgroundColor: active ? 'var(--bg-hover)' : 'var(--bg-field)',
                   color: 'var(--ink-primary)',
@@ -190,7 +191,7 @@ export function ParcelForm({
         </div>
 
         {selectedCrop && selectedCrop.criticalMonths.length > 0 && (
-          <p className="text-xs" style={{ color: 'var(--ink-muted)' }}>
+          <p className="text-xs leading-relaxed" style={{ color: 'var(--ink-muted)' }}>
             {t.cropCriticalPrefix}{' '}
             <span className="font-medium" style={{ color: 'var(--ink-secondary)' }}>
               {selectedCrop.criticalMonths.map((m) => monthNames[m - 1]).join(', ')}
@@ -199,10 +200,10 @@ export function ParcelForm({
         )}
       </fieldset>
 
-      {/* Step 3: Assessment date */}
-      <fieldset className="m-0 space-y-2 border-0 p-0">
+      {/* Step 3: Assessment date — native browser calendar icon only (no duplicate icon) */}
+      <fieldset className="flex flex-col gap-2.5 border-0 p-0">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <legend className="text-sm font-bold" style={{ color: 'var(--ink-primary)' }}>
+          <legend className="p-0 text-sm font-bold" style={{ color: 'var(--ink-primary)' }}>
             {t.step3Label}
           </legend>
           <div className="inline-flex rounded-lg p-0.5" style={{ backgroundColor: 'var(--bg-field)' }}>
@@ -218,7 +219,7 @@ export function ParcelForm({
                   style={{
                     backgroundColor: active ? 'var(--bg-surface)' : 'transparent',
                     color: active ? 'var(--ink-primary)' : 'var(--ink-muted)',
-                    boxShadow: active ? '0 1px 2px rgba(15, 23, 42, 0.08)' : 'none',
+                    boxShadow: active ? '0 1px 2px rgba(0, 0, 0, 0.08)' : 'none',
                   }}
                 >
                   {preset.label}
@@ -228,24 +229,16 @@ export function ParcelForm({
           </div>
         </div>
 
-        <div className="relative">
-          <Calendar
-            className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2"
-            style={{ color: 'var(--ink-muted)' }}
-            strokeWidth={1.75}
-            aria-hidden="true"
-          />
-          <input
-            id="target-date-input"
-            type="date"
-            min={minDate}
-            max={maxDate}
-            value={targetDate}
-            onChange={(e) => onChangeTargetDate(e.target.value)}
-            aria-label={t.step3Label}
-            className="input-well tabular-nums h-11 w-full rounded-xl pl-10 pr-3.5 text-sm font-medium"
-          />
-        </div>
+        <input
+          id="target-date-input"
+          type="date"
+          min={minDate}
+          max={maxDate}
+          value={targetDate}
+          onChange={(e) => onChangeTargetDate(e.target.value)}
+          aria-label={t.step3Label}
+          className="input-well tabular-nums h-11 w-full rounded-lg px-3.5 text-sm font-medium"
+        />
       </fieldset>
 
       {validationError && (
@@ -258,11 +251,11 @@ export function ParcelForm({
         </p>
       )}
 
-      <div className="space-y-2.5 pt-1">
+      <div className="flex flex-col gap-3 pt-1">
         <button
           type="submit"
           disabled={submitting}
-          className="btn-primary flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl px-5 text-base font-semibold disabled:opacity-60"
+          className="btn-primary flex min-h-[48px] w-full items-center justify-center gap-2 rounded-lg px-5 text-base font-semibold disabled:opacity-60"
         >
           <Search className="h-4 w-4 shrink-0" strokeWidth={2.25} aria-hidden="true" />
           <span>{submitting ? t.submittingButton : t.submitButton}</span>
