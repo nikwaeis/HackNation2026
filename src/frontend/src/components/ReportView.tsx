@@ -282,28 +282,41 @@ export function ReportView({ t, lang, report, isDemo = false, onBack }: ReportVi
     },
   ];
 
-  const copyButton = (className: string) => (
-    <button type="button" onClick={handleCopyLink} className={className} aria-pressed={copied}>
+  const copyButton = (className: string, compact = false) => (
+    <button
+      type="button"
+      onClick={handleCopyLink}
+      className={className}
+      aria-pressed={copied}
+      aria-label={compact ? (copied ? t.linkCopied : t.copyLinkShort) : undefined}
+      title={compact ? t.copyLinkShort : undefined}
+    >
       {copied ? (
         <Check className="h-4 w-4" strokeWidth={2.5} aria-hidden="true" style={{ color: 'var(--emerald)' }} />
       ) : (
         <Link2 className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
       )}
-      <span>{copied ? t.linkCopied : t.copyLinkShort}</span>
+      <span className={compact ? 'hidden sm:inline' : undefined}>{copied ? t.linkCopied : t.copyLinkShort}</span>
     </button>
   );
 
-  const pdfButton = (className: string) => (
-    <button type="button" onClick={() => window.print()} className={className}>
+  const pdfButton = (className: string, compact = false) => (
+    <button
+      type="button"
+      onClick={() => window.print()}
+      className={className}
+      aria-label={compact ? t.downloadPdf : undefined}
+      title={compact ? t.downloadPdf : undefined}
+    >
       <FileDown className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-      <span>{t.downloadPdf}</span>
+      <span className={compact ? 'hidden sm:inline' : undefined}>{t.downloadPdf}</span>
     </button>
   );
 
   return (
     <div className="relative lg:h-[calc(100vh-65px)] lg:overflow-hidden print:h-auto print:overflow-visible">
       {/* Map canvas with the highlighted parcel */}
-      <section aria-label={t.layerMap} className="no-print relative h-[380px] sm:h-[460px] lg:absolute lg:inset-0 lg:h-full">
+      <section aria-label={t.layerMap} className="no-print relative h-[48svh] max-h-[480px] min-h-[300px] sm:h-[460px] sm:max-h-none lg:absolute lg:inset-0 lg:h-full">
         <ParcelMap
           t={t}
           interactive={false}
@@ -324,8 +337,8 @@ export function ReportView({ t, lang, report, isDemo = false, onBack }: ReportVi
 
         {/* Floating actions */}
         <div className="absolute right-3 top-3 z-[500] flex flex-wrap justify-end gap-2 sm:right-4 sm:top-4">
-          {pdfButton('float-btn')}
-          {copyButton('float-btn')}
+          {pdfButton('float-btn !min-h-[40px] !px-3 sm:!min-h-[44px] sm:!px-[1.1rem]', true)}
+          {copyButton('float-btn !min-h-[40px] !px-3 sm:!min-h-[44px] sm:!px-[1.1rem]', true)}
         </div>
       </section>
 

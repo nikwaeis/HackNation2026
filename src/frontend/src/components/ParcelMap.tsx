@@ -16,6 +16,7 @@ import {
 } from 'react-leaflet';
 import {
   AlertCircle,
+  ChevronDown,
   CloudRain,
   Grid2x2,
   Layers,
@@ -351,7 +352,9 @@ function MapShortcuts({ t, reserveTopRight }: { t: TranslationDict; reserveTopRi
   return (
     <div
       ref={ref}
-      className={`glass-panel absolute right-4 z-[1000] flex flex-col overflow-hidden ${reserveTopRight ? 'top-[168px]' : 'top-[108px]'}`}
+      className={`glass-panel absolute right-3 z-[1000] flex flex-col overflow-hidden sm:right-4 ${
+        reserveTopRight ? 'top-[60px] sm:top-[168px]' : 'top-3 sm:top-[108px]'
+      }`}
     >
       {'geolocation' in navigator && (
         <button type="button" onClick={locate} title={t.mapLocateMe} aria-label={t.mapLocateMe} className="map-shortcut-btn">
@@ -415,6 +418,8 @@ export function ParcelMap({
   const [showParcels, setShowParcels] = useState(defaultShowParcels);
   const [showDrought, setShowDrought] = useState(false);
   const mapRef = useRef<L.Map | null>(null);
+  /** phones only: the legend is a collapsible chip (always open from the sm breakpoint) */
+  const [legendOpen, setLegendOpen] = useState(false);
 
   /* ---- Copernicus EDO drought layer: dekad-aligned TIME + tile status for the legend ---- */
   // undefined = capabilities not fetched yet; null = unknown (service did not answer)
@@ -803,10 +808,10 @@ export function ParcelMap({
 
       {/* Map instruction pill */}
       {interactive && (
-        <div className={`pointer-events-none absolute left-4 right-16 top-4 z-[400] flex justify-start ${overlayOffsetClass}`}>
+        <div className={`pointer-events-none absolute left-3 right-16 top-3 z-[400] flex justify-start sm:left-4 sm:top-4 ${overlayOffsetClass}`}>
           <div
             aria-live="polite"
-            className={`glass-pill flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium ${
+            className={`glass-pill flex items-center gap-2 px-3 py-2 text-xs font-medium leading-snug sm:gap-2.5 sm:px-4 sm:py-2.5 sm:text-sm ${
               selectionTone === 'warn' && selectionOutline ? 'notice-warn' : ''
             }`}
           >
@@ -822,16 +827,43 @@ export function ParcelMap({
 
       {/* Zoom hint for cadastral parcels */}
       {showParcels && zoom < PARCELS_MIN_ZOOM && (
-        <div className={`pointer-events-none absolute bottom-24 left-4 right-4 z-[400] flex justify-start ${overlayOffsetClass}`}>
+        <div className={`pointer-events-none absolute bottom-24 left-4 right-4 z-[400] hidden justify-start sm:flex ${overlayOffsetClass}`}>
           <div className="glass-panel px-3.5 py-2 text-sm font-medium">{t.zoomInForParcels}</div>
         </div>
       )}
 
       {/* Legend for the highlighted parcel overlays */}
       {(showLegend || showDrought) && (
+        <button
+          type="button"
+          onClick={() => setLegendOpen((v) => !v)}
+          aria-expanded={legendOpen}
+          aria-controls="map-legend"
+          className="glass-pill no-print absolute bottom-[66px] right-3 z-[401] inline-flex min-h-[36px] items-center gap-1.5 px-3 text-xs font-semibold sm:hidden"
+        >
+          {showDrought && (
+            <span
+              aria-hidden="true"
+              className={`h-2.5 w-2.5 rounded-full ${edoStatus === 'loading' ? 'animate-pulse' : ''}`}
+              style={{
+                backgroundColor:
+                  edoStatus === 'error' || edoStatus === 'partial'
+                    ? 'var(--warn-icon)'
+                    : edoStatus === 'loading'
+                      ? 'var(--ink-muted)'
+                      : 'var(--brand-primary)',
+              }}
+            />
+          )}
+          {t.legendToggle}
+          <ChevronDown className={`h-3.5 w-3.5 transition-transform ${legendOpen ? '' : 'rotate-180'}`} aria-hidden="true" />
+        </button>
+      )}
+      {(showLegend || showDrought) && (
         <div
-          className={`glass-panel no-print absolute bottom-24 right-3 z-[400] max-w-[280px] flex-col gap-2 px-3.5 py-3 text-xs sm:flex ${
-            showDrought ? 'flex' : 'hidden'
+          id="map-legend"
+          className={`glass-panel no-print panel-scroll absolute bottom-[110px] right-3 z-[400] max-h-[45%] w-[calc(100%-1.5rem)] max-w-[300px] flex-col gap-2 overflow-y-auto px-3.5 py-3 text-xs sm:bottom-24 sm:flex sm:max-h-none sm:w-auto sm:max-w-[280px] sm:overflow-visible ${
+            legendOpen ? 'flex' : 'hidden'
           }`}
         >
           {showLegend && (
@@ -846,6 +878,11 @@ export function ParcelMap({
                 <span className="flex items-center gap-2 font-medium">
                   <span aria-hidden="true" className="legend-swatch-field" />
                   {t.legendFields}
+                </span>
+              )}
+              {showParcels && zoom < PARCELS_MIN_ZOOM && (
+                <span className="leading-snug sm:hidden" style={{ color: 'var(--ink-secondary)' }}>
+                  {t.zoomInForParcels}
                 </span>
               )}
               {showBounds && (
@@ -954,15 +991,37 @@ export function ParcelMap({
       )}
 
       {/* Floating layer dock */}
-      <div className={`no-print absolute bottom-5 left-4 right-4 z-[400] flex items-center lg:right-auto ${overlayOffsetClass}`}>
-        <div role="toolbar" aria-label="Warstwy mapy" className="glass-panel inline-flex flex-wrap items-center gap-1 p-1.5">
+      <div className={`no-print absolute bottom-3 left-3 right-3 z-[400] flex items-center sm:bottom-5 sm:left-4 sm:right-4 lg:right-auto ${overlayOffsetClass}`}>
+        <div
+          role="toolbar"
+          aria-label="Warstwy mapy"
+          className="glass-panel no-scrollbar inline-flex max-w-full flex-nowrap items-center gap-1 overflow-x-auto p-1 sm:flex-wrap sm:p-1.5"
+        >
           {(
             [
-              { key: 'osm', label: t.layerMap, Icon: MapIcon, pressed: baseLayer === 'osm', onClick: () => pickBase('osm') },
-              { key: 'orto', label: t.layerOrto, Icon: Layers, pressed: baseLayer === 'orto', onClick: () => pickBase('orto') },
+              { key: 'osm', label: t.layerMap, short: t.layerMap, Icon: MapIcon, pressed: baseLayer === 'osm', onClick: () => pickBase('osm') },
+              { key: 'orto', label: t.layerOrto, short: t.layerOrtoShort, Icon: Layers, pressed: baseLayer === 'orto', onClick: () => pickBase('orto') },
               null,
-              { key: 'parcels', label: t.layerParcels, Icon: Grid2x2, pressed: showParcels, onClick: () => setShowParcels((v) => !v) },
-              { key: 'edo', label: t.layerDrought, Icon: CloudRain, pressed: showDrought, onClick: () => setShowDrought((v) => !v) },
+              {
+                key: 'parcels',
+                label: t.layerParcels,
+                short: t.layerParcelsShort,
+                Icon: Grid2x2,
+                pressed: showParcels,
+                onClick: () => setShowParcels((v) => !v),
+              },
+              {
+                key: 'edo',
+                label: t.layerDrought,
+                short: t.layerDroughtShort,
+                Icon: CloudRain,
+                pressed: showDrought,
+                onClick: () =>
+                  setShowDrought((v) => {
+                    if (!v) setLegendOpen(true); // show the drought status right away on phones
+                    return !v;
+                  }),
+              },
             ] as const
           ).map((item, idx) =>
             item === null ? (
@@ -973,10 +1032,13 @@ export function ParcelMap({
                 type="button"
                 onClick={item.onClick}
                 aria-pressed={item.pressed}
-                className="layer-btn inline-flex min-h-[36px] items-center gap-1.5 px-3 text-sm font-semibold"
+                // full name for screen readers / tests; phones show the short label so all four fit
+                aria-label={item.label}
+                className="layer-btn inline-flex min-h-[38px] shrink-0 items-center gap-1.5 px-2.5 text-xs font-semibold sm:min-h-[36px] sm:px-3 sm:text-sm"
               >
                 <item.Icon className="h-4 w-4 shrink-0" strokeWidth={1.9} aria-hidden="true" />
-                <span>{item.label}</span>
+                <span className="sm:hidden">{item.short}</span>
+                <span className="hidden sm:inline">{item.label}</span>
               </button>
             ),
           )}

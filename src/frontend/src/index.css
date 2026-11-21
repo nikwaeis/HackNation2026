@@ -758,6 +758,54 @@ a[href] {
   text-transform: uppercase;
 }
 
+/* ---------- phones ---------- */
+
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+@media (max-width: 639px) {
+  /* pinch-zoom replaces the +/- buttons; the shortcuts take their place */
+  .leaflet-control-zoom {
+    display: none;
+  }
+
+  .parcel-tag__title {
+    font-size: 11px;
+  }
+
+  .parcel-tag__sub {
+    font-size: 10px;
+  }
+
+  .parcel-tag__card {
+    padding: 4px 8px;
+  }
+
+  .water-tag {
+    font-size: 11px;
+  }
+
+  /* comfortable touch targets */
+  .date-pill {
+    min-height: 36px;
+    padding: 0.4rem 0.9rem;
+    font-size: 0.8rem;
+  }
+
+  .chip {
+    min-height: 38px;
+  }
+
+  .leaflet-control-attribution {
+    font-size: 9px !important;
+  }
+}
+
 /* ---------- motion ---------- */
 
 @keyframes wodoplon-progress {

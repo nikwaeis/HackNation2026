@@ -243,7 +243,7 @@ export function HomePage({ t, lang }: HomePageProps) {
       {/* Full-bleed interactive Poland map on desktop; top canvas on mobile */}
       <section
         aria-label={t.layerMap}
-        className="h-[380px] w-full sm:h-[440px] lg:absolute lg:inset-0 lg:h-full"
+        className="h-[56svh] max-h-[560px] min-h-[340px] w-full sm:h-[440px] sm:max-h-none lg:absolute lg:inset-0 lg:h-full"
       >
         <ParcelMap
           t={t}

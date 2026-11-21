@@ -79,6 +79,7 @@ export function Header({
             type="button"
             onClick={onToggleDarkMode}
             aria-pressed={darkMode}
+            aria-label={t.a11yHighContrast}
             title={darkMode ? t.themeLightTitle : t.themeDarkTitle}
             className="btn-ghost inline-flex min-h-[38px] items-center gap-1.5 rounded-md px-2.5 text-sm font-medium"
             style={darkMode ? { backgroundColor: 'var(--bg-hover)', color: 'var(--ink-primary)', fontWeight: 600 } : undefined}
