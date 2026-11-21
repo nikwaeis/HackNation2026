@@ -59,6 +59,24 @@ services:
     volumes:
       - ./src/python-service:/app
 
+  # Bulk OSM water for nearest-water lookups (run once, refresh monthly):
+  #   docker compose -f docker-compose.dev.yml run --rm osm-import
+  osm-import:
+    image: ghcr.io/osgeo/gdal:ubuntu-small-3.10.3
+    profiles: ["tools"]
+    environment:
+      PGHOST: postgres
+      PGDATABASE: ${POSTGRES_DB}
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./scripts:/scripts:ro
+      - osm:/data
+    entrypoint: ["sh", "/scripts/import-osm-water.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   frontend:
     build:
       context: ./src/frontend
@@ -76,3 +94,4 @@ services:
 volumes:
   pgdata:
   nuget:
+  osm:

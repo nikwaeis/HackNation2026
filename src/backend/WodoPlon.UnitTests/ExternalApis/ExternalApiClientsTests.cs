@@ -2,9 +2,11 @@ using System.Net;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NetTopologySuite.Geometries;
 using WodoPlon.Api.Common.Interface;
 using WodoPlon.Api.Common.Models;
+using WodoPlon.Api.Common.Options;
 using WodoPlon.Api.Common.Services;
 using WodoPlon.Domain.Entities;
 using WodoPlon.Domain.Enums;
@@ -146,6 +148,42 @@ public class ExternalApiClientsTests
 
     #region Overpass
 
+    private static readonly IOptions<ExternalApisSettings> NoMirrors =
+        Options.Create(new ExternalApisSettings { OverpassMirrorUrls = [] });
+
+    /// <summary> Answers each request with the next canned response </summary>
+    private sealed class SequenceHandler(params (HttpStatusCode Status, string Body)[] responses) : HttpMessageHandler
+    {
+        private int _next;
+        public List<Uri> Requests { get; } = [];
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Requests.Add(request.RequestUri!);
+            var (status, body) = responses[Math.Min(_next++, responses.Length - 1)];
+            return Task.FromResult(new HttpResponseMessage(status) { Content = new StringContent(body) });
+        }
+    }
+
+    [Fact]
+    public async Task Overpass_Falls_Back_To_Mirror_And_Null_When_All_Fail()
+    {
+        var settings = Options.Create(new ExternalApisSettings { OverpassMirrorUrls = ["https://mirror.local/"] });
+        var handler = new SequenceHandler((HttpStatusCode.GatewayTimeout, ""), (HttpStatusCode.OK, """{"elements":[]}"""));
+        var client = new HttpClient(handler) { BaseAddress = new Uri("https://main.local/"), Timeout = TimeSpan.FromSeconds(30) };
+
+        var features = await new OverpassClient(client, settings, NullLogger<OverpassClient>.Instance)
+            .GetHydroAroundAsync(53.05, 18.35, 1000);
+
+        features.Should().BeEmpty(); // "no water nearby" is an answer, not a failure
+        handler.Requests.Select(u => u.Host).Should().Equal("main.local", "mirror.local");
+
+        var down = new SequenceHandler((HttpStatusCode.BadGateway, ""));
+        var none = await new OverpassClient(new HttpClient(down) { BaseAddress = new Uri("https://main.local/") }, settings,
+            NullLogger<OverpassClient>.Instance).GetHydroAroundAsync(53.05, 18.35, 1000);
+        none.Should().BeNull();
+    }
+
     [Fact]
     public async Task Overpass_Maps_Tags_To_Hydro_Types()
     {
@@ -159,7 +197,7 @@ public class ExternalApiClientsTests
             """;
         var stub = new StubHandler(body);
 
-        var features = await new OverpassClient(stub.Client(), NullLogger<OverpassClient>.Instance)
+        var features = await new OverpassClient(stub.Client(), NoMirrors, NullLogger<OverpassClient>.Instance)
             .GetHydroAroundAsync(53.05, 18.35, 1000);
 
         features!.Select(f => (f.OsmId, f.Type, f.Name, f.Geom.GeometryType))
@@ -181,21 +219,37 @@ public class ExternalApiClientsTests
     public async Task GeoWorker_Speaks_Snake_Case_Contract()
     {
         const string body = """
-            {"mean_slope_deg":4.2,"max_slope_deg":7.8,"steep_area_pct":38.0,"ndvi_mean":0.41,"ndwi_mean":-0.18,
-             "satellite_scene_date":"2026-07-12","cloud_cover_pct":5.0,"satellite_status":"NO_DATA"}
+            {"dzialka_id":"040101_1.0001.123/4",
+             "terrain":{"status":"OK","mean_slope_deg":4.2,"max_slope_deg":7.8,"steep_area_pct":38.0,"source":"Geoportal NMT WCS"},
+             "satellite":{"status":"CLOUDY_FALLBACK","ndvi_mean":0.41,"ndwi_mean":-0.18,"scene_date":"2026-07-12",
+                          "cloud_cover_pct":5.0,"source":"Sentinel-2 L2A (Earth Search)","error_reason":null}}
             """;
         var stub = new StubHandler(body);
 
         var metrics = await new PythonServiceClient(stub.Client(), NullLogger<PythonServiceClient>.Instance)
             .ExtractGeoAsync(ParcelId, new DateOnly(2026, 7, 15), needTerrain: true, Square);
 
-        metrics.Should().Be(new GeoMetrics(4.2m, 7.8m, 38.0m, 0.41m, -0.18m, new DateOnly(2026, 7, 12), 5.0m, SatelliteStatus.NoData));
+        metrics.Should().Be(new GeoMetrics(4.2m, 7.8m, 38.0m, 0.41m, -0.18m, new DateOnly(2026, 7, 12), 5.0m, SatelliteStatus.CloudyFallback));
 
         var sent = JsonDocument.Parse(stub.LastBody!).RootElement;
         sent.GetProperty("dzialka_id").GetString().Should().Be(ParcelId.Value);
         sent.GetProperty("target_date").GetString().Should().Be("2026-07-15");
-        sent.GetProperty("need_terrain").GetBoolean().Should().BeTrue();
+        sent.GetProperty("include_terrain").GetBoolean().Should().BeTrue();
         sent.GetProperty("geometry").GetProperty("type").GetString().Should().Be("MultiPolygon");
+    }
+
+    [Fact]
+    public async Task GeoWorker_Failed_Sections_Give_No_Data()
+    {
+        const string body = """
+            {"dzialka_id":"x","terrain":{"status":"ERROR","mean_slope_deg":null,"error_reason":"timeout"},
+             "satellite":{"status":"ERROR","ndvi_mean":null,"error_reason":"timeout"}}
+            """;
+
+        var metrics = await new PythonServiceClient(new StubHandler(body).Client(), NullLogger<PythonServiceClient>.Instance)
+            .ExtractGeoAsync(ParcelId, new DateOnly(2026, 7, 15), needTerrain: true, Square);
+
+        metrics.Should().Be(new GeoMetrics(null, null, null, null, null, null, null, SatelliteStatus.Error));
     }
 
     [Fact]

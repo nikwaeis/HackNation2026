@@ -1,0 +1,61 @@
+#!/bin/sh
+# Imports all Polish OSM water (rivers, streams, canals, ditches, drains, lakes, wetlands) into hydro_features,
+# so the API finds the nearest water locally in milliseconds instead of asking Overpass.
+# Run (dev):  docker compose -f docker-compose.dev.yml run --rm osm-import
+# Run (prod): docker compose -f docker-compose.prod.yml run --rm osm-import
+# Re-run monthly to refresh; it is idempotent (upsert by OSM id).
+set -eu
+
+PBF_URL="${PBF_URL:-https://download.geofabrik.de/europe/poland-latest.osm.pbf}"
+PBF=/data/poland-latest.osm.pbf
+# prod passes the password as a docker secret file
+if [ -n "${PGPASSWORD_FILE:-}" ]; then PGPASSWORD="$(cat "$PGPASSWORD_FILE")"; export PGPASSWORD; fi
+PG="PG:host=${PGHOST} dbname=${PGDATABASE} user=${PGUSER} password=${PGPASSWORD}"
+
+sql() { ogrinfo -q "$PG" -sql "$1" > /dev/null; }
+
+echo "1/4 download (only if Geofabrik has a newer file)"
+if [ -f "$PBF" ]; then
+  curl -fsSL -R -z "$PBF" -o "$PBF.part" "$PBF_URL" && [ -s "$PBF.part" ] && mv "$PBF.part" "$PBF" || rm -f "$PBF.part"
+else
+  curl -fsSL -R -o "$PBF.part" "$PBF_URL" && mv "$PBF.part" "$PBF"
+fi
+SOURCE_DATE="$(date -u -r "$PBF" +%F)"
+echo "    extract date: $SOURCE_DATE"
+
+# OSM driver: larger temp index in RAM/disk makes the 2 GB extract much faster
+export OSM_MAX_TMPFILE_SIZE=2000
+
+echo "2/4 waterways (lines)"
+ogr2ogr -f PostgreSQL "$PG" "$PBF" lines -overwrite -nln osm_water_lines -t_srs EPSG:4326 \
+  -lco GEOMETRY_NAME=geom -lco SPATIAL_INDEX=NONE -select osm_id,name,waterway \
+  -where "waterway IN ('river','stream','canal','ditch','drain')"
+
+echo "3/4 lakes and wetlands (areas)"
+ogr2ogr -f PostgreSQL "$PG" "$PBF" multipolygons -overwrite -nln osm_water_areas -t_srs EPSG:4326 \
+  -lco GEOMETRY_NAME=geom -lco SPATIAL_INDEX=NONE -select osm_id,osm_way_id,name,natural \
+  -where "\"natural\" IN ('water','wetland')"
+
+echo "4/4 upsert into hydro_features"
+# ids as Overpass returns them: ways positive; relations negative so they never clash with way ids
+sql "INSERT INTO hydro_features (feature_type, name, geom, osm_id)
+     SELECT DISTINCT ON (osm_id::bigint)
+            CASE WHEN waterway IN ('river','stream','canal') THEN 'River' ELSE 'Ditch' END,
+            left(name, 150), geom, osm_id::bigint
+     FROM osm_water_lines WHERE geom IS NOT NULL
+     ON CONFLICT (osm_id) DO UPDATE SET feature_type = EXCLUDED.feature_type, name = EXCLUDED.name, geom = EXCLUDED.geom"
+sql "INSERT INTO hydro_features (feature_type, name, geom, osm_id)
+     SELECT DISTINCT ON (id) type, name, geom, id FROM (
+       SELECT CASE \"natural\" WHEN 'water' THEN 'Lake' ELSE 'Wetland' END AS type, left(name, 150) AS name,
+              ST_MakeValid(geom) AS geom, COALESCE(osm_way_id::bigint, -osm_id::bigint) AS id
+       FROM osm_water_areas WHERE geom IS NOT NULL) a
+     ON CONFLICT (osm_id) DO UPDATE SET feature_type = EXCLUDED.feature_type, name = EXCLUDED.name, geom = EXCLUDED.geom"
+sql "DROP TABLE osm_water_lines"
+sql "DROP TABLE osm_water_areas"
+sql "ANALYZE hydro_features"
+# profiles checked against older data get the new one on their next analysis
+sql "UPDATE parcel_static_profiles SET water_checked_at = NULL"
+sql "INSERT INTO data_imports (name, imported_at, source_date) VALUES ('osm_water', now(), DATE '$SOURCE_DATE')
+     ON CONFLICT (name) DO UPDATE SET imported_at = EXCLUDED.imported_at, source_date = EXCLUDED.source_date"
+
+echo "done: OSM water as of $SOURCE_DATE"

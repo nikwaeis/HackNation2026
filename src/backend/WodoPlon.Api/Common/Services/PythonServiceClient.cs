@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using NetTopologySuite.Geometries;
 using NetTopologySuite.IO.Converters;
 using WodoPlon.Api.Common.Interface;
+using WodoPlon.Domain.Enums;
 using WodoPlon.Domain.ValueObjects;
 
 namespace WodoPlon.Api.Common.Services;
@@ -45,7 +46,8 @@ public sealed class PythonServiceClient(HttpClient httpClient, ILogger<PythonSer
                 return null;
             }
 
-            return await response.Content.ReadFromJsonAsync<GeoMetrics>(JsonOptions, cancellationToken);
+            var wire = await response.Content.ReadFromJsonAsync<ExtractGeoResponse>(JsonOptions, cancellationToken);
+            return wire is null ? null : ToMetrics(wire);
         }
         catch (Exception e) when (e is HttpRequestException or JsonException or TaskCanceledException
                                   && !cancellationToken.IsCancellationRequested)
@@ -55,5 +57,28 @@ public sealed class PythonServiceClient(HttpClient httpClient, ILogger<PythonSer
         }
     }
 
-    private sealed record ExtractGeoRequest(string DzialkaId, DateOnly TargetDate, bool NeedTerrain, Geometry Geometry);
+    // terrain counts only when OK; satellite "ERROR" (worker-side failure) is retried by ObservationService
+    private static GeoMetrics ToMetrics(ExtractGeoResponse wire)
+    {
+        var terrain = wire.Terrain?.Status == "OK" ? wire.Terrain : null;
+        var satellite = wire.Satellite;
+        var status = satellite?.Status switch
+        {
+            "OK" => SatelliteStatus.Ok,
+            "CLOUDY_FALLBACK" => SatelliteStatus.CloudyFallback,
+            "NO_DATA" => SatelliteStatus.NoData,
+            _ => SatelliteStatus.Error
+        };
+        return new GeoMetrics(terrain?.MeanSlopeDeg, terrain?.MaxSlopeDeg, terrain?.SteepAreaPct,
+            satellite?.NdviMean, satellite?.NdwiMean, satellite?.SceneDate, satellite?.CloudCoverPct, status);
+    }
+
+    private sealed record ExtractGeoRequest(string DzialkaId, DateOnly TargetDate, bool IncludeTerrain, Geometry Geometry);
+
+    private sealed record ExtractGeoResponse(TerrainSection? Terrain, SatelliteSection? Satellite);
+
+    private sealed record TerrainSection(string? Status, decimal? MeanSlopeDeg, decimal? MaxSlopeDeg, decimal? SteepAreaPct);
+
+    private sealed record SatelliteSection(string? Status, decimal? NdviMean, decimal? NdwiMean, DateOnly? SceneDate,
+        decimal? CloudCoverPct);
 }

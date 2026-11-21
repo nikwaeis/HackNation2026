@@ -303,6 +303,14 @@ namespace WodoPlon.Api.Data.Migrations
                         .HasColumnType("numeric(5,2)")
                         .HasColumnName("steep_area_pct");
 
+                    b.Property<DateTimeOffset?>("WaterCheckedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("water_checked_at");
+
+                    b.Property<DateOnly?>("WaterDataDate")
+                        .HasColumnType("date")
+                        .HasColumnName("water_data_date");
+
                     b.HasKey("ParcelId");
 
                     b.ToTable("parcel_static_profiles", (string)null);
@@ -333,7 +341,7 @@ namespace WodoPlon.Api.Data.Migrations
 
                     b.Property<string>("Payload")
                         .IsRequired()
-                        .HasColumnType("jsonb")
+                        .HasColumnType("json")
                         .HasColumnName("report_payload");
 
                     b.Property<DateOnly>("TargetDate")

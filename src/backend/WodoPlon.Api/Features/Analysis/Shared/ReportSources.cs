@@ -1,6 +1,5 @@
 using WodoPlon.Domain.Entities;
 using WodoPlon.Domain.Enums;
-using static WodoPlon.Api.Features.Analysis.Shared.Recommendations;
 
 namespace WodoPlon.Api.Features.Analysis.Shared;
 
@@ -10,51 +9,64 @@ public static class ReportSources
     /// <summary> Open-Meteo archive fills the last days with a delay </summary>
     public const int ArchiveLagDays = 5;
 
-    public static string[] Sources(ParcelStaticProfile profile, DynamicObservation observation)
+    public static string[] Sources(ParcelStaticProfile profile, DynamicObservation observation, ReportText text)
     {
         var sources = new List<string>
         {
-            "ULDK GUGiK (granice działki ewidencyjnej)",
-            Text($"Open-Meteo Archive API (dane meteorologiczne {observation.TargetDate.Year - DynamicObservation.HistoryYears}–{observation.TargetDate.Year})"),
-            "FAO-56 (zapotrzebowanie uprawy na wodę ETc = ET0 × Kc)"
+            text["Report.Source.Uldk"],
+            text["Report.Source.OpenMeteo", observation.TargetDate.Year - DynamicObservation.HistoryYears, observation.TargetDate.Year],
+            text["Report.Source.Fao"]
         };
 
-        if (observation.SatelliteStatus != SatelliteStatus.NoData)
+        if (observation.SatelliteStatus is SatelliteStatus.Ok or SatelliteStatus.CloudyFallback)
             sources.Add(observation.CloudCoverPct is { } cloud
-                ? Text($"Sentinel-2 L2A Earth Search (zdjęcie z dnia {observation.SatelliteSceneDate:yyyy-MM-dd}, zachmurzenie {cloud.Value:0}%)")
-                : Text($"Sentinel-2 L2A Earth Search (zdjęcie z dnia {observation.SatelliteSceneDate:yyyy-MM-dd})"));
+                ? text["Report.Source.SentinelWithCloud", observation.SatelliteSceneDate, cloud.Value]
+                : text["Report.Source.Sentinel", observation.SatelliteSceneDate]);
         if (profile.SandPct is not null)
-            sources.Add("ISRIC SoilGrids v2.0 (skład granulometryczny gleby, rozdzielczość 250 m)");
+            sources.Add(text["Report.Source.SoilGrids"]);
         if (profile.MeanSlopeDeg is not null)
-            sources.Add("Geoportal NMT WCS (numeryczny model terenu)");
-        sources.Add("OpenStreetMap / Overpass API (cieki, rowy i zbiorniki wodne)");
+            sources.Add(text["Report.Source.Nmt"]);
+        if (profile.WaterCheckedAt is not null)
+            sources.Add(profile.WaterDataDate is { } waterDate
+                ? text["Report.Source.OsmDated", waterDate]
+                : text["Report.Source.Osm"]);
 
         return sources.ToArray();
     }
 
-    public static string[] Limitations(ParcelStaticProfile profile, DynamicObservation observation)
+    public static string[] Limitations(ParcelStaticProfile profile, DynamicObservation observation, ReportText text)
     {
         var limitations = new List<string>();
 
-        if (observation.SatelliteStatus == SatelliteStatus.NoData)
-            limitations.Add("Brak bezchmurnego zdjęcia Sentinel-2 w oknie ±15 dni: ocenę wykonano na podstawie danych meteorologicznych i glebowych, bez korekty satelitarnej.");
-        if (observation.SatelliteStatus == SatelliteStatus.CloudyFallback)
-            limitations.Add("Zdjęcie Sentinel-2 było częściowo zachmurzone, wskaźniki NDVI i NDWI mogą być mniej dokładne.");
+        switch (observation.SatelliteStatus)
+        {
+            case SatelliteStatus.NoData:
+                limitations.Add(text["Report.Limitation.SatelliteNoData"]);
+                break;
+            case SatelliteStatus.Error:
+                limitations.Add(text["Report.Limitation.SatelliteError"]);
+                break;
+            case SatelliteStatus.CloudyFallback:
+                limitations.Add(text["Report.Limitation.SatelliteCloudy"]);
+                break;
+        }
 
         limitations.Add(profile.SandPct is null
-            ? Text($"Brak danych SoilGrids dla działki: przyjęto przeciętne parametry gleby średniej (retencja {SoilAwc.LoamAwcMmPerM:0} mm/m).")
-            : "Dane glebowe SoilGrids mają rozdzielczość 250 m i mogą nie uwzględniać lokalnych zabiegów agrotechnicznych.");
+            ? text["Report.Limitation.SoilMissing", SoilAwc.LoamAwcMmPerM]
+            : text["Report.Limitation.SoilResolution"]);
 
         if (profile.MeanSlopeDeg is null)
-            limitations.Add("Brak danych o ukształtowaniu terenu: nie oceniono ryzyka spływu powierzchniowego.");
-        if (profile.NearestWaterType is null)
-            limitations.Add(Text($"W promieniu {ParcelProfileService.HydroSearchRadiusM} m nie znaleziono cieków ani zbiorników wodnych (lub dane OpenStreetMap były niedostępne)."));
+            limitations.Add(text["Report.Limitation.ReliefMissing"]);
+        if (profile.WaterCheckedAt is null)
+            limitations.Add(text["Report.Limitation.WaterPending"]);
+        else if (profile.NearestWaterType is null)
+            limitations.Add(text["Report.Limitation.WaterNone", WaterLookupService.HydroSearchRadiusM]);
 
         var fetchedOn = DateOnly.FromDateTime(observation.FetchedAt.UtcDateTime);
         if (observation.TargetDate > fetchedOn.AddDays(-ArchiveLagDays))
-            limitations.Add("Dane meteorologiczne z ostatnich dni przed datą analizy mogą być niepełne (opóźnienie archiwum Open-Meteo).");
+            limitations.Add(text["Report.Limitation.MeteoLag"]);
 
-        limitations.Add("Analiza nie uwzględnia aktualnego poziomu wód gruntowych w studniach lokalnych.");
+        limitations.Add(text["Report.Limitation.Groundwater"]);
         return limitations.ToArray();
     }
 }

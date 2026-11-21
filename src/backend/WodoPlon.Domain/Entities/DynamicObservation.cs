@@ -114,7 +114,7 @@ public sealed class DynamicObservation
         var hasAnyData = satellite.NdviMean is not null || satellite.NdwiMean is not null
             || satellite.SceneDate is not null || satellite.CloudCoverPct is not null;
 
-        if (satellite.Status == SatelliteStatus.NoData)
+        if (satellite.Status is SatelliteStatus.NoData or SatelliteStatus.Error)
         {
             // no scene → no indices, otherwise report would show numbers without a source
             if (hasAnyData)

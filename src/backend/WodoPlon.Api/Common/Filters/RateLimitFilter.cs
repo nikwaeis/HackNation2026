@@ -63,12 +63,18 @@ public sealed class RateLimitFilter(
         return result;
     }
 
+    /// <summary> IP window allows this many fingerprint windows: neighbours behind one NAT rarely block each other </summary>
+    public const int IpLimitFactor = 3;
+
     private List<RateLimitTarget> Targets(EndpointFilterInvocationContext context, RateLimitPolicy policy, string name)
     {
         var http = context.HttpContext;
         var targets = new List<RateLimitTarget>
         {
-            new($"{name}:a:{Fingerprint(http, userAgentService)}", Math.Max(1, policy.Limit), policy.Window)
+            new($"{name}:a:{Fingerprint(http, userAgentService)}", Math.Max(1, policy.Limit), policy.Window),
+            // the fingerprint has client-set headers; this window caps header rotation, with room for a shared NAT
+            new($"{name}:ip:{Hash(http.Connection.RemoteIpAddress?.ToString() ?? "no-address")}",
+                Math.Max(1, policy.Limit) * IpLimitFactor, policy.Window)
         };
 
         if (policy.PerIdentity is { } rule)

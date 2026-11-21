@@ -36,6 +36,11 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 // Redis + HybridCache
 var redisOptions = ConfigurationOptions.Parse(builder.Configuration.GetRequired("Redis:ConnectionString"));
 redisOptions.AbortOnConnectFail = false;
+// Redis is optional (rate limit fails open, HybridCache falls back to memory): fail fast instead of waiting 5 s per call
+redisOptions.ConnectTimeout = 2000;
+redisOptions.AsyncTimeout = 1000;
+redisOptions.SyncTimeout = 1000;
+redisOptions.BacklogPolicy = BacklogPolicy.FailFast;
 var redis = await ConnectionMultiplexer.ConnectAsync(redisOptions);
 builder.Services.AddSingleton<IConnectionMultiplexer>(redis);
 builder.Services.AddStackExchangeRedisCache(options =>
@@ -52,6 +57,10 @@ builder.Services.AddLocalization();
 builder.Services.AddScoped<IDataSeeder, CropSeeder>();
 builder.Services.AddScoped<ParcelProfileService>();
 builder.Services.AddScoped<ObservationService>();
+builder.Services.AddScoped<WaterLookupService>();
+builder.Services.AddSingleton<FetchCoalescer>();
+builder.Services.AddSingleton<HydroLookupQueue>();
+builder.Services.AddHostedService<HydroBackgroundService>();
 
 // enums go over the wire as "HIGH" / "NO_DATA", geometries as GeoJSON
 builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.AddApiConverters());
@@ -63,8 +72,13 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
 
+    // only our own reverse proxy (loopback / docker / LAN) may set the client IP; a client can't spoof X-Forwarded-For
     options.KnownIPNetworks.Clear();
     options.KnownProxies.Clear();
+    var trusted = builder.Configuration.GetSection("ForwardedHeaders:KnownNetworks").Get<string[]>()
+                  ?? ["127.0.0.0/8", "::1/128", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7"];
+    foreach (var network in trusted)
+        options.KnownIPNetworks.Add(System.Net.IPNetwork.Parse(network));
 });
 
 // All options registration

@@ -46,7 +46,8 @@ public class SavedReportConfiguration : IEntityTypeConfiguration<SavedReport>
 
         builder.Property(r => r.Payload)
             .HasColumnName("report_payload")
-            .HasColumnType("jsonb")
+            // json, not jsonb: keeps the text as written, so GET /api/reports/{id} returns it byte for byte
+            .HasColumnType("json")
             .IsRequired();
 
         builder.Property(r => r.CreatedAt)

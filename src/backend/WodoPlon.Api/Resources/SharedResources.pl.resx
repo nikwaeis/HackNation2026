@@ -145,4 +145,175 @@
     <data name="Analysis.ReportNotFound" xml:space="preserve">
         <value>Nie znaleziono raportu.</value>
     </data>
+    <data name="Report.Level.Critical" xml:space="preserve">
+        <value>Krytyczne ryzyko suszy rolniczej</value>
+    </data>
+    <data name="Report.Level.High" xml:space="preserve">
+        <value>Wysokie ryzyko suszy rolniczej</value>
+    </data>
+    <data name="Report.Level.Moderate" xml:space="preserve">
+        <value>Umiarkowane ryzyko suszy rolniczej</value>
+    </data>
+    <data name="Report.Level.Low" xml:space="preserve">
+        <value>Niskie ryzyko suszy rolniczej</value>
+    </data>
+    <data name="Report.Summary" xml:space="preserve">
+        <value>{0}. Bilans wodny uprawy za ostatnie 90 dni wynosi {1:+0.0;-0.0;0.0} mm: opady {2:0.0} mm wobec potrzeb uprawy {3:0.0} mm ({4}).</value>
+    </data>
+    <data name="Report.SummaryWithNorm" xml:space="preserve">
+        <value>{0}. Bilans wodny uprawy za ostatnie 90 dni wynosi {1:+0.0;-0.0;0.0} mm wobec typowego dla tego miejsca {5:+0.0;-0.0;0.0} mm (mediana 10 lat): opady {2:0.0} mm wobec potrzeb uprawy {3:0.0} mm ({4}).</value>
+    </data>
+    <data name="Report.History.None" xml:space="preserve">
+        <value>W ciągu ostatnich 10 lat w tym okresie nie występowały sezony wyraźnie suchsze od typowych dla tego miejsca (bilans o ponad 50 mm gorszy od mediany).</value>
+    </data>
+    <data name="Report.History.One" xml:space="preserve">
+        <value>W ciągu ostatnich 10 lat wyraźnie suchszy od typowego sezon (bilans o ponad 50 mm gorszy od mediany) wystąpił w tym okresie 1 raz.</value>
+    </data>
+    <data name="Report.History.Many" xml:space="preserve">
+        <value>W ciągu ostatnich 10 lat sezony wyraźnie suchsze od typowych (bilans o ponad 50 mm gorszy od mediany) wystąpiły w tym okresie {0} razy.</value>
+    </data>
+    <data name="Report.Cause.LowRainAndDrySpell" xml:space="preserve">
+        <value>Niskie opady ({0:0.0} mm wobec normy {1:0.0} mm) oraz {2} dni bez opadów.</value>
+    </data>
+    <data name="Report.Cause.LowRain" xml:space="preserve">
+        <value>Niskie opady w ostatnich 90 dniach ({0:0.0} mm wobec normy {1:0.0} mm).</value>
+    </data>
+    <data name="Report.Cause.DrySpell" xml:space="preserve">
+        <value>Długi okres bez opadów: {0} dni z rzędu z opadem poniżej 1 mm.</value>
+    </data>
+    <data name="Report.Cause.Sandy" xml:space="preserve">
+        <value>Gleba lekka, piaszczysta ({0:0}% piasku) o niskiej pojemności wodnej.</value>
+    </data>
+    <data name="Report.Cause.LowHumus" xml:space="preserve">
+        <value>Niska zawartość materii organicznej ({0:0.0} g/kg) ogranicza zatrzymywanie wody w glebie.</value>
+    </data>
+    <data name="Report.Cause.Slope" xml:space="preserve">
+        <value>Nachylenie terenu ({0:0.0}°) przyspiesza spływ powierzchniowy.</value>
+    </data>
+    <data name="Report.Cause.SteepArea" xml:space="preserve">
+        <value>{0:0}% powierzchni działki ma spadek powyżej 3°, co przyspiesza spływ wody opadowej.</value>
+    </data>
+    <data name="Report.Cause.Ditch" xml:space="preserve">
+        <value>Rów melioracyjny w odległości {0:0} m przyspiesza odpływ wód gruntowych z działki.</value>
+    </data>
+    <data name="Report.Cause.None" xml:space="preserve">
+        <value>Nie stwierdzono czynników pogłębiających niedobór wody na działce.</value>
+    </data>
+    <data name="Report.Measure.Mulch.Title" xml:space="preserve">
+        <value>Mulczowanie i pozostawienie resztek pożniwnych</value>
+    </data>
+    <data name="Report.Measure.Mulch.Description" xml:space="preserve">
+        <value>Okrywa z resztek roślinnych ogranicza bezproduktywne parowanie wody z powierzchni gleby.</value>
+    </data>
+    <data name="Report.Measure.CoverCrops.Title" xml:space="preserve">
+        <value>Międzyplony i uprawa bezorkowa</value>
+    </data>
+    <data name="Report.Measure.CoverCrops.Description" xml:space="preserve">
+        <value>Międzyplony i ograniczenie orki zwiększą zawartość próchnicy i pojemność wodną lekkiej gleby.</value>
+    </data>
+    <data name="Report.Measure.CoverCrops.DescriptionLowHumus" xml:space="preserve">
+        <value>Międzyplony i ograniczenie orki zwiększą zawartość próchnicy (obecnie niska: {0:0.0} g/kg) i pojemność wodną gleby.</value>
+    </data>
+    <data name="Report.Measure.Contour.Title" xml:space="preserve">
+        <value>Uprawa poprzeczna do stoku i strefy buforowe</value>
+    </data>
+    <data name="Report.Measure.Contour.Description" xml:space="preserve">
+        <value>Uprawa w poprzek stoku, pasy zadarnione oraz małe zbiorniki u podnóża stoku zatrzymają wodę z ulewnych opadów.</value>
+    </data>
+    <data name="Report.Measure.DitchDam.Title" xml:space="preserve">
+        <value>Zastawki na rowie melioracyjnym ({0:0} m od działki)</value>
+    </data>
+    <data name="Report.Measure.DitchDam.Description" xml:space="preserve">
+        <value>Spowolnienie odpływu wody w pobliskim rowie podniesie poziom wód gruntowych w strefie korzeniowej.</value>
+    </data>
+    <data name="Report.Measure.KeepCover.Title" xml:space="preserve">
+        <value>Utrzymanie okrywy roślinnej</value>
+    </data>
+    <data name="Report.Measure.KeepCover.Description" xml:space="preserve">
+        <value>Pozostawianie resztek pożniwnych i unikanie gołej gleby utrzyma obecny stan uwilgotnienia.</value>
+    </data>
+    <data name="Report.Irrigation.NotNeeded" xml:space="preserve">
+        <value>Nawadnianie nie jest obecnie potrzebne. Priorytetem pozostaje zatrzymanie wody w glebie i krajobrazie.</value>
+    </data>
+    <data name="Report.Irrigation.OutsideCriticalMonths" xml:space="preserve">
+        <value>Mimo niedoboru wody nawadnianie nie jest zalecane poza krytycznym okresem wzrostu uprawy ({0}). Priorytetem są zabiegi zatrzymujące wodę w glebie.</value>
+    </data>
+    <data name="Report.Irrigation.Recommended" xml:space="preserve">
+        <value>Nawadnianie interwencyjne uzasadnione w krytycznym okresie wzrostu: jednorazowa dawka {0:0} mm ({1:0} m³/ha), podawana rano lub wieczorem, wyłącznie po wdrożeniu zabiegów ograniczających parowanie.</value>
+    </data>
+    <data name="Report.Months" xml:space="preserve">
+        <value>styczeń,luty,marzec,kwiecień,maj,czerwiec,lipiec,sierpień,wrzesień,październik,listopad,grudzień</value>
+    </data>
+    <data name="Report.Source.Uldk" xml:space="preserve">
+        <value>ULDK GUGiK (granice działki ewidencyjnej)</value>
+    </data>
+    <data name="Report.Source.OpenMeteo" xml:space="preserve">
+        <value>Open-Meteo Archive API (dane meteorologiczne {0}–{1})</value>
+    </data>
+    <data name="Report.Source.Fao" xml:space="preserve">
+        <value>FAO-56 (zapotrzebowanie uprawy na wodę ETc = ET0 × Kc)</value>
+    </data>
+    <data name="Report.Source.SentinelWithCloud" xml:space="preserve">
+        <value>Sentinel-2 L2A Earth Search (zdjęcie z dnia {0:yyyy-MM-dd}, zachmurzenie {1:0}%)</value>
+    </data>
+    <data name="Report.Source.Sentinel" xml:space="preserve">
+        <value>Sentinel-2 L2A Earth Search (zdjęcie z dnia {0:yyyy-MM-dd})</value>
+    </data>
+    <data name="Report.Source.SoilGrids" xml:space="preserve">
+        <value>ISRIC SoilGrids v2.0 (skład granulometryczny gleby, rozdzielczość 250 m)</value>
+    </data>
+    <data name="Report.Source.Nmt" xml:space="preserve">
+        <value>Geoportal NMT WCS (numeryczny model terenu)</value>
+    </data>
+    <data name="Report.Source.Osm" xml:space="preserve">
+        <value>OpenStreetMap / Overpass API (cieki, rowy i zbiorniki wodne)</value>
+    </data>
+    <data name="Report.Source.OsmDated" xml:space="preserve">
+        <value>OpenStreetMap (cieki, rowy i zbiorniki wodne, stan danych na {0:yyyy-MM-dd})</value>
+    </data>
+    <data name="Report.Limitation.SatelliteNoData" xml:space="preserve">
+        <value>Brak bezchmurnego zdjęcia Sentinel-2 w oknie ±15 dni: ocenę wykonano na podstawie danych meteorologicznych i glebowych, bez korekty satelitarnej.</value>
+    </data>
+    <data name="Report.Limitation.SatelliteError" xml:space="preserve">
+        <value>Usługa danych satelitarnych była chwilowo niedostępna: ocenę wykonano bez korekty satelitarnej, dane zostaną pobrane ponownie przy kolejnej analizie.</value>
+    </data>
+    <data name="Report.Limitation.SatelliteCloudy" xml:space="preserve">
+        <value>Zdjęcie Sentinel-2 było częściowo zachmurzone, wskaźniki NDVI i NDWI mogą być mniej dokładne.</value>
+    </data>
+    <data name="Report.Limitation.SoilMissing" xml:space="preserve">
+        <value>Brak danych SoilGrids dla działki: przyjęto przeciętne parametry gleby średniej (retencja {0:0} mm/m).</value>
+    </data>
+    <data name="Report.Limitation.SoilResolution" xml:space="preserve">
+        <value>Dane glebowe SoilGrids mają rozdzielczość 250 m i mogą nie uwzględniać lokalnych zabiegów agrotechnicznych.</value>
+    </data>
+    <data name="Report.Limitation.ReliefMissing" xml:space="preserve">
+        <value>Brak danych o ukształtowaniu terenu: nie oceniono ryzyka spływu powierzchniowego.</value>
+    </data>
+    <data name="Report.Limitation.WaterPending" xml:space="preserve">
+        <value>Dane o ciekach, rowach i zbiornikach wodnych w pobliżu działki są jeszcze pobierane: zostaną uwzględnione przy kolejnej analizie.</value>
+    </data>
+    <data name="Report.Limitation.WaterNone" xml:space="preserve">
+        <value>W promieniu {0} m nie znaleziono cieków ani zbiorników wodnych w danych OpenStreetMap.</value>
+    </data>
+    <data name="Report.Limitation.MeteoLag" xml:space="preserve">
+        <value>Dane meteorologiczne z ostatnich dni przed datą analizy mogą być niepełne (opóźnienie archiwum Open-Meteo).</value>
+    </data>
+    <data name="Report.Limitation.Groundwater" xml:space="preserve">
+        <value>Analiza nie uwzględnia aktualnego poziomu wód gruntowych w studniach lokalnych.</value>
+    </data>
+    <data name="Crop.sugar_beet" xml:space="preserve">
+        <value>Burak cukrowy</value>
+    </data>
+    <data name="Crop.maize" xml:space="preserve">
+        <value>Kukurydza</value>
+    </data>
+    <data name="Crop.winter_wheat" xml:space="preserve">
+        <value>Pszenica ozima</value>
+    </data>
+    <data name="Crop.rapeseed" xml:space="preserve">
+        <value>Rzepak ozimy</value>
+    </data>
+    <data name="Crop.potato" xml:space="preserve">
+        <value>Ziemniak</value>
+    </data>
 </root>

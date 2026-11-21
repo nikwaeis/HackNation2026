@@ -67,14 +67,18 @@ public class AnalyzeEndpointTests
             new MeteoData(40m, 98.4m, 182m, 340m, 24, [new WeatherMonth(0, 6, 98.4m, 340m)]),
             new SatelliteData(SatelliteStatus.NoData), DateTimeOffset.UnixEpoch).Value!;
 
-        var response = AnalysisResponse.From(Guid.Empty, parcel, crop, new DateOnly(2026, 7, 15),
-            AnalysisEngine.Assess(profile, observation, crop));
+        var text = TestTexts.Use("pl");
+        var response = AnalysisResponse.From(Guid.Empty, parcel, crop, text.CropName(crop), new DateOnly(2026, 7, 15),
+            AnalysisEngine.Assess(profile, observation, crop, text));
         var json = JsonDocument.Parse(JsonSerializer.Serialize(response,
             new JsonSerializerOptions(JsonSerializerDefaults.Web).AddApiConverters())).RootElement;
 
         json.GetProperty("parcelInfo").GetProperty("targetDate").GetString().Should().Be("2026-07-15");
         json.GetProperty("parcelInfo").GetProperty("polygonGeoJson").GetProperty("type").GetString().Should().Be("MultiPolygon");
         json.GetProperty("step1_diagnosis").GetProperty("riskLevel").GetString().Should().Be("CRITICAL");
+        // no past years in this window → no norm, but the field is part of the contract
+        json.GetProperty("step1_diagnosis").GetProperty("metrics").GetProperty("waterBalance10yrMedianMm").ValueKind
+            .Should().Be(JsonValueKind.Null);
         json.GetProperty("step1_diagnosis").GetProperty("metrics").GetProperty("precip90dMm").GetDecimal().Should().Be(98.4m);
         json.GetProperty("step2_causesAndRetention").GetProperty("retentionRecommendationsPl")[0]
             .GetProperty("type").GetString().Should().Be("LANDSCAPE");

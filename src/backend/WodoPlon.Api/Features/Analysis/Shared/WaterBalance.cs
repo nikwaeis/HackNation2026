@@ -6,15 +6,22 @@ namespace WodoPlon.Api.Features.Analysis.Shared;
 /// <summary> Step 1: crop water need by FAO-56 (ETc = ET0 × Kc), 90-day balance, drought history and risk level </summary>
 public static class WaterBalance
 {
-    /// <summary> Past year counts as a drought year below this 90-day balance </summary>
-    public const decimal DroughtYearBalanceMm = -100m;
-
+    // Hybrid scale (KOWR: tell current drought apart from a locally dry climate):
+    // CRITICAL is absolute, HIGH / MODERATE and drought years are measured against the parcel's own 10-year median
     public const decimal CriticalBalanceMm = -180m;
-    public const decimal HighBalanceMm = -110m;
-    public const decimal HighSandyBalanceMm = -90m;
-    public const decimal ModerateBalanceMm = -40m;
     public const int CriticalDrySpellDays = 21;
+    public const decimal HighAnomalyMm = -50m;
+    public const decimal HighSandyAnomalyMm = -35m;
+    public const decimal ModerateAnomalyMm = -20m;
+    /// <summary> Past year counts as a drought year when its balance is this much below the median </summary>
+    public const decimal DroughtYearAnomalyMm = -50m;
     public const int ModerateDroughtYears = 5;
+
+    // used only when the weather archive has no past years for the window
+    public const decimal FallbackHighBalanceMm = -110m;
+    public const decimal FallbackHighSandyBalanceMm = -90m;
+    public const decimal FallbackModerateBalanceMm = -40m;
+
     /// <summary> NDWI below this confirms water stress of the canopy </summary>
     public const decimal StressNdwi = -0.10m;
     public const decimal SevereStressNdwi = -0.15m;
@@ -34,24 +41,62 @@ public static class WaterBalance
     public static decimal BalanceMm(IEnumerable<WeatherMonth> months, Crop crop) =>
         Math.Round(months.Sum(m => m.PrecipMm - m.Et0Mm * Kc(crop, m.Month)), 1);
 
-    /// <summary> Past years (of 10) whose same 90-day window had a balance below −100 mm </summary>
-    public static int DroughtYears(IEnumerable<WeatherMonth> windowMonths, Crop crop) =>
-        windowMonths
-            .Where(m => m.YearsBack > 0)
-            .GroupBy(m => m.YearsBack)
-            .Count(year => BalanceMm(year, crop) < DroughtYearBalanceMm);
+    /// <summary> Median 90-day balance of the 10 past years; null when the archive has none </summary>
+    public static decimal? MedianBalanceMm(IEnumerable<WeatherMonth> windowMonths, Crop crop)
+    {
+        var balances = PastBalances(windowMonths, crop);
+        if (balances.Length == 0)
+            return null;
 
-    // api.md leaves a gap: balance < −180 without long dry spell or NDWI stress fits no level, it is treated as HIGH
-    public static WaterDeficitLevel Classify(decimal balanceMm, int drySpellDays, decimal? ndwi, decimal? sandPct,
-        int droughtYears)
+        int mid = balances.Length / 2;
+        return balances.Length % 2 == 1 ? balances[mid] : Math.Round((balances[mid - 1] + balances[mid]) / 2, 1);
+    }
+
+    /// <summary> Past years (of 10) whose same 90-day window was at least 50 mm drier than the median </summary>
+    public static int DroughtYears(IEnumerable<WeatherMonth> windowMonths, Crop crop)
+    {
+        var months = windowMonths as WeatherMonth[] ?? windowMonths.ToArray();
+        if (MedianBalanceMm(months, crop) is not { } median)
+            return 0;
+
+        return PastBalances(months, crop).Count(b => b - median < DroughtYearAnomalyMm);
+    }
+
+    /// <param name="medianMm"> 10-year median balance; null falls back to absolute thresholds </param>
+    public static WaterDeficitLevel Classify(decimal balanceMm, decimal? medianMm, int drySpellDays, decimal? ndwi,
+        decimal? sandPct, int droughtYears)
     {
         if (balanceMm < CriticalBalanceMm && (drySpellDays >= CriticalDrySpellDays || ndwi < SevereStressNdwi))
             return WaterDeficitLevel.Critical;
-        if (balanceMm < HighBalanceMm || (balanceMm < HighSandyBalanceMm && sandPct > SandyPct))
+
+        bool sandy = sandPct > SandyPct;
+        bool high, moderate;
+        if (medianMm is { } median)
+        {
+            decimal anomaly = balanceMm - median;
+            high = anomaly < HighAnomalyMm || (sandy && anomaly < HighSandyAnomalyMm);
+            moderate = anomaly < ModerateAnomalyMm;
+        }
+        else
+        {
+            high = balanceMm < FallbackHighBalanceMm || (sandy && balanceMm < FallbackHighSandyBalanceMm);
+            moderate = balanceMm < FallbackModerateBalanceMm;
+        }
+
+        // an absolute deficit beyond the critical line is never below HIGH, even in a dry region
+        if (high || balanceMm < CriticalBalanceMm)
             return WaterDeficitLevel.High;
-        if (balanceMm < ModerateBalanceMm || droughtYears >= ModerateDroughtYears || ndwi < StressNdwi)
+        if (moderate || droughtYears >= ModerateDroughtYears || ndwi < StressNdwi)
             return WaterDeficitLevel.Moderate;
 
         return WaterDeficitLevel.Low;
     }
+
+    private static decimal[] PastBalances(IEnumerable<WeatherMonth> windowMonths, Crop crop) =>
+        windowMonths
+            .Where(m => m.YearsBack > 0)
+            .GroupBy(m => m.YearsBack)
+            .Select(year => BalanceMm(year, crop))
+            .Order()
+            .ToArray();
 }

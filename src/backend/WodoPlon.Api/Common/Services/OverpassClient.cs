@@ -2,14 +2,20 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using NetTopologySuite.Geometries;
+using Microsoft.Extensions.Options;
 using WodoPlon.Api.Common.Interface;
+using WodoPlon.Api.Common.Options;
 using WodoPlon.Domain.Entities;
 using WodoPlon.Domain.Enums;
 
 namespace WodoPlon.Api.Common.Services;
 
-public sealed class OverpassClient(HttpClient httpClient, ILogger<OverpassClient> logger) : IOverpassClient
+public sealed class OverpassClient(HttpClient httpClient, IOptions<ExternalApisSettings> settings, ILogger<OverpassClient> logger)
+    : IOverpassClient
 {
+    /// <summary> Server-side query budget is this much below the HTTP timeout, so Overpass answers before we give up </summary>
+    private const int ServerTimeoutMarginS = 5;
+
     private static readonly GeometryFactory Factory = new(new PrecisionModel(), Parcel.Srid);
 
     public async Task<HydroFeatureData[]?> GetHydroAroundAsync(double lat, double lon, int radiusM,
@@ -18,7 +24,7 @@ public sealed class OverpassClient(HttpClient httpClient, ILogger<OverpassClient
         // shortcut: only ways, relations (big multipolygon lakes) are skipped; add `relation` + `out geom` members if nearest water is often missed
         string around = string.Create(CultureInfo.InvariantCulture, $"around:{radiusM},{lat},{lon}");
         string query = $"""
-            [out:json][timeout:{(int)httpClient.Timeout.TotalSeconds}];
+            [out:json][timeout:{(int)httpClient.Timeout.TotalSeconds - ServerTimeoutMarginS}];
             (
               way({around})["waterway"~"^(river|stream|canal|ditch|drain)$"];
               way({around})["natural"~"^(water|wetland)$"];
@@ -26,13 +32,28 @@ public sealed class OverpassClient(HttpClient httpClient, ILogger<OverpassClient
             out tags geom;
             """;
 
+        // main instance first, then mirrors; any answer (even "no water") ends the search
+        var endpoints = settings.Value.OverpassMirrorUrls
+            .Select(url => new Uri(new Uri(url), "api/interpreter"))
+            .Prepend(new Uri("api/interpreter", UriKind.Relative));
+        foreach (var endpoint in endpoints)
+        {
+            if (await TryQueryAsync(endpoint, query, cancellationToken) is { } features)
+                return features;
+        }
+
+        return null;
+    }
+
+    private async Task<HydroFeatureData[]?> TryQueryAsync(Uri endpoint, string query, CancellationToken cancellationToken)
+    {
         try
         {
             using var content = new FormUrlEncodedContent([new("data", query)]);
-            using var response = await httpClient.PostAsync("api/interpreter", content, cancellationToken);
+            using var response = await httpClient.PostAsync(endpoint, content, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
-                logger.LogWarning("Overpass returned {StatusCode}", (int)response.StatusCode);
+                logger.LogWarning("Overpass {Endpoint} returned {StatusCode}", endpoint, (int)response.StatusCode);
                 return null;
             }
 
@@ -45,7 +66,7 @@ public sealed class OverpassClient(HttpClient httpClient, ILogger<OverpassClient
         catch (Exception e) when (e is HttpRequestException or JsonException or TaskCanceledException
                                   && !cancellationToken.IsCancellationRequested)
         {
-            logger.LogWarning(e, "Overpass request failed");
+            logger.LogWarning(e, "Overpass {Endpoint} request failed", endpoint);
             return null;
         }
     }

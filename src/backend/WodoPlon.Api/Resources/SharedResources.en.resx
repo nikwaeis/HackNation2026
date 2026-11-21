@@ -145,4 +145,175 @@
     <data name="Analysis.ReportNotFound" xml:space="preserve">
         <value>Report not found.</value>
     </data>
+    <data name="Report.Level.Critical" xml:space="preserve">
+        <value>Critical agricultural drought risk</value>
+    </data>
+    <data name="Report.Level.High" xml:space="preserve">
+        <value>High agricultural drought risk</value>
+    </data>
+    <data name="Report.Level.Moderate" xml:space="preserve">
+        <value>Moderate agricultural drought risk</value>
+    </data>
+    <data name="Report.Level.Low" xml:space="preserve">
+        <value>Low agricultural drought risk</value>
+    </data>
+    <data name="Report.Summary" xml:space="preserve">
+        <value>{0}. The crop water balance for the last 90 days is {1:+0.0;-0.0;0.0} mm: {2:0.0} mm of rain against a crop need of {3:0.0} mm ({4}).</value>
+    </data>
+    <data name="Report.SummaryWithNorm" xml:space="preserve">
+        <value>{0}. The crop water balance for the last 90 days is {1:+0.0;-0.0;0.0} mm against {5:+0.0;-0.0;0.0} mm typical for this place (10-year median): {2:0.0} mm of rain against a crop need of {3:0.0} mm ({4}).</value>
+    </data>
+    <data name="Report.History.None" xml:space="preserve">
+        <value>In the last 10 years no season in this period was clearly drier than usual for this place (balance more than 50 mm below the median).</value>
+    </data>
+    <data name="Report.History.One" xml:space="preserve">
+        <value>In the last 10 years a season clearly drier than usual (balance more than 50 mm below the median) occurred in this period once.</value>
+    </data>
+    <data name="Report.History.Many" xml:space="preserve">
+        <value>In the last 10 years seasons clearly drier than usual (balance more than 50 mm below the median) occurred in this period {0} times.</value>
+    </data>
+    <data name="Report.Cause.LowRainAndDrySpell" xml:space="preserve">
+        <value>Low rainfall ({0:0.0} mm against a norm of {1:0.0} mm) and {2} days without rain.</value>
+    </data>
+    <data name="Report.Cause.LowRain" xml:space="preserve">
+        <value>Low rainfall in the last 90 days ({0:0.0} mm against a norm of {1:0.0} mm).</value>
+    </data>
+    <data name="Report.Cause.DrySpell" xml:space="preserve">
+        <value>Long dry spell: {0} days in a row with less than 1 mm of rain.</value>
+    </data>
+    <data name="Report.Cause.Sandy" xml:space="preserve">
+        <value>Light, sandy soil ({0:0}% sand) with low water capacity.</value>
+    </data>
+    <data name="Report.Cause.LowHumus" xml:space="preserve">
+        <value>Low organic matter content ({0:0.0} g/kg) limits water retention in the soil.</value>
+    </data>
+    <data name="Report.Cause.Slope" xml:space="preserve">
+        <value>The terrain slope ({0:0.0}°) speeds up surface runoff.</value>
+    </data>
+    <data name="Report.Cause.SteepArea" xml:space="preserve">
+        <value>{0:0}% of the parcel slopes more than 3°, which speeds up rainwater runoff.</value>
+    </data>
+    <data name="Report.Cause.Ditch" xml:space="preserve">
+        <value>A drainage ditch {0:0} m away speeds up groundwater outflow from the parcel.</value>
+    </data>
+    <data name="Report.Cause.None" xml:space="preserve">
+        <value>No factors deepening the water deficit were found on the parcel.</value>
+    </data>
+    <data name="Report.Measure.Mulch.Title" xml:space="preserve">
+        <value>Mulching and leaving crop residues</value>
+    </data>
+    <data name="Report.Measure.Mulch.Description" xml:space="preserve">
+        <value>A cover of crop residues limits unproductive evaporation from the soil surface.</value>
+    </data>
+    <data name="Report.Measure.CoverCrops.Title" xml:space="preserve">
+        <value>Cover crops and no-till farming</value>
+    </data>
+    <data name="Report.Measure.CoverCrops.Description" xml:space="preserve">
+        <value>Cover crops and less ploughing will raise humus content and the water capacity of the light soil.</value>
+    </data>
+    <data name="Report.Measure.CoverCrops.DescriptionLowHumus" xml:space="preserve">
+        <value>Cover crops and less ploughing will raise humus content (now low: {0:0.0} g/kg) and the water capacity of the soil.</value>
+    </data>
+    <data name="Report.Measure.Contour.Title" xml:space="preserve">
+        <value>Cross-slope tillage and buffer strips</value>
+    </data>
+    <data name="Report.Measure.Contour.Description" xml:space="preserve">
+        <value>Tilling across the slope, grass strips and small ponds at the foot of the slope will hold water from heavy rain.</value>
+    </data>
+    <data name="Report.Measure.DitchDam.Title" xml:space="preserve">
+        <value>Weirs on the drainage ditch ({0:0} m from the parcel)</value>
+    </data>
+    <data name="Report.Measure.DitchDam.Description" xml:space="preserve">
+        <value>Slowing the outflow in the nearby ditch will raise the groundwater level in the root zone.</value>
+    </data>
+    <data name="Report.Measure.KeepCover.Title" xml:space="preserve">
+        <value>Keeping the plant cover</value>
+    </data>
+    <data name="Report.Measure.KeepCover.Description" xml:space="preserve">
+        <value>Leaving crop residues and avoiding bare soil will keep the current soil moisture.</value>
+    </data>
+    <data name="Report.Irrigation.NotNeeded" xml:space="preserve">
+        <value>Irrigation is not needed now. Keeping water in the soil and landscape remains the priority.</value>
+    </data>
+    <data name="Report.Irrigation.OutsideCriticalMonths" xml:space="preserve">
+        <value>Despite the water deficit, irrigation is not advised outside the critical growth period of the crop ({0}). Measures that keep water in the soil come first.</value>
+    </data>
+    <data name="Report.Irrigation.Recommended" xml:space="preserve">
+        <value>Emergency irrigation is justified in the critical growth period: a single dose of {0:0} mm ({1:0} m³/ha), applied in the morning or evening, only after measures limiting evaporation are in place.</value>
+    </data>
+    <data name="Report.Months" xml:space="preserve">
+        <value>January,February,March,April,May,June,July,August,September,October,November,December</value>
+    </data>
+    <data name="Report.Source.Uldk" xml:space="preserve">
+        <value>ULDK GUGiK (cadastral parcel boundaries)</value>
+    </data>
+    <data name="Report.Source.OpenMeteo" xml:space="preserve">
+        <value>Open-Meteo Archive API (weather data {0}–{1})</value>
+    </data>
+    <data name="Report.Source.Fao" xml:space="preserve">
+        <value>FAO-56 (crop water need ETc = ET0 × Kc)</value>
+    </data>
+    <data name="Report.Source.SentinelWithCloud" xml:space="preserve">
+        <value>Sentinel-2 L2A Earth Search (scene of {0:yyyy-MM-dd}, cloud cover {1:0}%)</value>
+    </data>
+    <data name="Report.Source.Sentinel" xml:space="preserve">
+        <value>Sentinel-2 L2A Earth Search (scene of {0:yyyy-MM-dd})</value>
+    </data>
+    <data name="Report.Source.SoilGrids" xml:space="preserve">
+        <value>ISRIC SoilGrids v2.0 (soil texture, 250 m resolution)</value>
+    </data>
+    <data name="Report.Source.Nmt" xml:space="preserve">
+        <value>Geoportal NMT WCS (digital terrain model)</value>
+    </data>
+    <data name="Report.Source.Osm" xml:space="preserve">
+        <value>OpenStreetMap / Overpass API (rivers, ditches and water bodies)</value>
+    </data>
+    <data name="Report.Source.OsmDated" xml:space="preserve">
+        <value>OpenStreetMap (rivers, ditches and water bodies, data as of {0:yyyy-MM-dd})</value>
+    </data>
+    <data name="Report.Limitation.SatelliteNoData" xml:space="preserve">
+        <value>No cloud-free Sentinel-2 scene within ±15 days: the assessment uses weather and soil data without satellite correction.</value>
+    </data>
+    <data name="Report.Limitation.SatelliteError" xml:space="preserve">
+        <value>The satellite data service was temporarily unavailable: the assessment has no satellite correction, the data will be fetched again on the next analysis.</value>
+    </data>
+    <data name="Report.Limitation.SatelliteCloudy" xml:space="preserve">
+        <value>The Sentinel-2 scene was partly cloudy, NDVI and NDWI may be less accurate.</value>
+    </data>
+    <data name="Report.Limitation.SoilMissing" xml:space="preserve">
+        <value>No SoilGrids data for the parcel: average medium soil parameters were assumed (retention {0:0} mm/m).</value>
+    </data>
+    <data name="Report.Limitation.SoilResolution" xml:space="preserve">
+        <value>SoilGrids soil data has a 250 m resolution and may not reflect local farming practices.</value>
+    </data>
+    <data name="Report.Limitation.ReliefMissing" xml:space="preserve">
+        <value>No terrain data: surface runoff risk was not assessed.</value>
+    </data>
+    <data name="Report.Limitation.WaterPending" xml:space="preserve">
+        <value>Data on rivers, ditches and water bodies near the parcel is still being loaded: it will be included in the next analysis.</value>
+    </data>
+    <data name="Report.Limitation.WaterNone" xml:space="preserve">
+        <value>No rivers or water bodies were found within {0} m in OpenStreetMap data.</value>
+    </data>
+    <data name="Report.Limitation.MeteoLag" xml:space="preserve">
+        <value>Weather data for the last days before the analysis date may be incomplete (Open-Meteo archive delay).</value>
+    </data>
+    <data name="Report.Limitation.Groundwater" xml:space="preserve">
+        <value>The analysis does not account for the current groundwater level in local wells.</value>
+    </data>
+    <data name="Crop.sugar_beet" xml:space="preserve">
+        <value>Sugar beet</value>
+    </data>
+    <data name="Crop.maize" xml:space="preserve">
+        <value>Maize</value>
+    </data>
+    <data name="Crop.winter_wheat" xml:space="preserve">
+        <value>Winter wheat</value>
+    </data>
+    <data name="Crop.rapeseed" xml:space="preserve">
+        <value>Winter rapeseed</value>
+    </data>
+    <data name="Crop.potato" xml:space="preserve">
+        <value>Potato</value>
+    </data>
 </root>

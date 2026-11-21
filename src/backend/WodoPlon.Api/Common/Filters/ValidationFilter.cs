@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentValidation;
 using Microsoft.Extensions.Localization;
 using WodoPlon.Api.Resources;
@@ -25,7 +26,8 @@ public sealed class ValidationFilter(IStringLocalizer<SharedResources> localizer
                 continue;
 
             Dictionary<string, string[]> errorCodesByProperty = validationResult.Errors
-                .GroupBy(failure => failure.PropertyName)
+                // same casing as the JSON request fields (dzialkaId, not DzialkaId)
+                .GroupBy(failure => JsonNamingPolicy.CamelCase.ConvertName(failure.PropertyName))
                 .ToDictionary(
                     group => group.Key,
                     group => group.Select(failure => localizer[failure.ErrorCode].Value).ToArray());

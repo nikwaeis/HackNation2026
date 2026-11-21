@@ -52,6 +52,12 @@ public sealed class ParcelStaticProfile
     /// <summary> Type of the nearest water object </summary>
     public HydroFeatureType? NearestWaterType { get; private set; }
 
+    /// <summary> When nearest water was looked up (Overpass + PostGIS); null = not yet, lookup is retried </summary>
+    public DateTimeOffset? WaterCheckedAt { get; private set; }
+
+    /// <summary> Date of the OSM data the nearest water comes from (local import date or the live Overpass query day) </summary>
+    public DateOnly? WaterDataDate { get; private set; }
+
     /// <summary> When the profile was built </summary>
     public DateTimeOffset FetchedAt { get; private set; }
 
@@ -63,10 +69,11 @@ public sealed class ParcelStaticProfile
 
     private ParcelStaticProfile() { }
 
+    /// <param name="waterCheckedAt"> Null when water was not looked up yet (it is filled in the background) </param>
     public static Result<ParcelStaticProfile> Create(ParcelIdVo parcelId, ReliefData relief, SoilData soil,
-        WaterData water, DateTimeOffset fetchedAt)
+        WaterData water, DateTimeOffset fetchedAt, DateTimeOffset? waterCheckedAt = null)
     {
-        var profile = new ParcelStaticProfile { ParcelId = parcelId };
+        var profile = new ParcelStaticProfile { ParcelId = parcelId, WaterCheckedAt = waterCheckedAt };
         var refreshResult = profile.Refresh(relief, soil, water, fetchedAt);
         if (refreshResult.IsFailure)
             return refreshResult.Errors;
@@ -117,6 +124,20 @@ public sealed class ParcelStaticProfile
             new SoilData(SandPct?.Value, ClayPct?.Value, SiltPct?.Value, OrganicCarbonGKg, AwcMmPerM, SoilDroughtVulnerability),
             new WaterData(NearestWaterDistM, NearestWaterType),
             fetchedAt);
+
+    /// <summary> Stores the nearest water found by the background lookup and marks it as checked </summary>
+    public Result UpdateWater(WaterData water, DateTimeOffset checkedAt, DateOnly dataDate)
+    {
+        var result = Refresh(new ReliefData(MeanSlopeDeg, MaxSlopeDeg, SteepAreaPct?.Value),
+            new SoilData(SandPct?.Value, ClayPct?.Value, SiltPct?.Value, OrganicCarbonGKg, AwcMmPerM, SoilDroughtVulnerability),
+            water, FetchedAt);
+        if (result.IsSuccess)
+        {
+            WaterCheckedAt = checkedAt;
+            WaterDataDate = dataDate;
+        }
+        return result;
+    }
 
     /// <summary> Large steep share means rain runs off instead of soaking in </summary>
     public bool HasRunoffRisk => SteepAreaPct?.Value > RunoffRiskSteepPct;

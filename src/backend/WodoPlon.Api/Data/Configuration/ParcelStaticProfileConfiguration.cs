@@ -42,6 +42,14 @@ public class ParcelStaticProfileConfiguration : IEntityTypeConfiguration<ParcelS
             .HasConversion<string>()
             .HasMaxLength(30);
 
+        builder.Property(p => p.WaterCheckedAt)
+            .HasColumnName("water_checked_at")
+            .HasColumnType("timestamptz");
+
+        builder.Property(p => p.WaterDataDate)
+            .HasColumnName("water_data_date")
+            .HasColumnType("date");
+
         builder.Property(p => p.FetchedAt)
             .HasColumnName("fetched_at")
             .HasColumnType("timestamptz")

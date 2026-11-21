@@ -61,6 +61,26 @@ services:
       dockerfile: Dockerfile.prod
     restart: unless-stopped
 
+  # Bulk OSM water for nearest-water lookups (run once before go-live, refresh monthly):
+  #   docker compose -f docker-compose.prod.yml run --rm osm-import
+  osm-import:
+    image: ghcr.io/osgeo/gdal:ubuntu-small-3.10.3
+    profiles: ["tools"]
+    env_file: .env.prod
+    environment:
+      PGHOST: postgres
+      PGPASSWORD_FILE: /run/secrets/db_password
+    secrets:
+      - db_password
+    volumes:
+      - ./scripts:/scripts:ro
+      - osm:/data
+    # database name and user come from .env.prod (POSTGRES_DB / POSTGRES_USER), as for the postgres service
+    entrypoint: ["sh", "-c", "PGDATABASE=$$POSTGRES_DB PGUSER=$$POSTGRES_USER exec sh /scripts/import-osm-water.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   frontend:
     build:
       context: ./src/frontend
@@ -84,3 +104,4 @@ secrets:
 volumes:
   pgdata:
   redisdata:
+  osm:

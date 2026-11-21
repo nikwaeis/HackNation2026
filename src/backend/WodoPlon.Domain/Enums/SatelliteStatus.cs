@@ -7,5 +7,7 @@ public enum SatelliteStatus
     /// <summary> Only a cloudy scene was available, indices are less reliable </summary>
     CloudyFallback,
     /// <summary> No usable scene, indices are absent </summary>
-    NoData
+    NoData,
+    /// <summary> Satellite service failed or was unreachable; asked again on the next analysis </summary>
+    Error
 }

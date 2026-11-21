@@ -1,7 +1,9 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Options;
+using WodoPlon.Api.Resources;
 using WodoPlon.Api.Common.Interface;
 using WodoPlon.Api.Data;
 using WodoPlon.Api.Features.Analysis.Shared;
@@ -16,7 +18,8 @@ public sealed class AnalyzeParcelHandler(
     ParcelProfileService parcels,
     ObservationService observations,
     TimeProvider timeProvider,
-    IOptions<JsonOptions> jsonOptions)
+    IOptions<JsonOptions> jsonOptions,
+    IStringLocalizer<SharedResources> localizer)
     : ICommandHandler<AnalyzeParcelCommand, AnalysisResponse>
 {
     private readonly AppDbContext _db = db;
@@ -24,6 +27,8 @@ public sealed class AnalyzeParcelHandler(
     private readonly ObservationService _observations = observations;
     private readonly TimeProvider _timeProvider = timeProvider;
     private readonly JsonSerializerOptions _jsonOptions = jsonOptions.Value.SerializerOptions;
+    // report language = request culture (Accept-Language); the saved report keeps it
+    private readonly ReportText _text = new(localizer);
 
     public async Task<Result<AnalysisResponse>> HandleAsync(AnalyzeParcelCommand command,
         CancellationToken cancellationToken = default)
@@ -48,10 +53,10 @@ public sealed class AnalyzeParcelHandler(
             return observationResult.Errors;
 
         // profile is always saved together with the parcel (ParcelProfileService)
-        var assessment = AnalysisEngine.Assess(parcel.StaticProfile!, observationResult.Value!, crop);
+        var assessment = AnalysisEngine.Assess(parcel.StaticProfile!, observationResult.Value!, crop, _text);
 
         var reportId = Guid.CreateVersion7();
-        var response = AnalysisResponse.From(reportId, parcel, crop, command.TargetDate, assessment);
+        var response = AnalysisResponse.From(reportId, parcel, crop, _text.CropName(crop), command.TargetDate, assessment);
 
         // stored in the wire format, so GET /api/reports/{id} returns it byte for byte
         var reportResult = SavedReport.Create(parcel.Id, crop.Id, command.TargetDate, assessment.RiskLevel,

@@ -16,10 +16,12 @@ public record AnalysisResponse
     [property: JsonPropertyName("step4_sourcesAndLimitations")] SourcesAndLimitationsResponse Step4SourcesAndLimitations
 )
 {
-    public static AnalysisResponse From(Guid reportUuid, Parcel parcel, Crop crop, DateOnly targetDate, Assessment assessment) =>
+    /// <param name="cropName"> Crop name in the report language (field keeps its contract name cropNamePl) </param>
+    public static AnalysisResponse From(Guid reportUuid, Parcel parcel, Crop crop, string cropName, DateOnly targetDate,
+        Assessment assessment) =>
         new(
             reportUuid,
-            new ParcelInfoResponse(parcel.Id.Value, parcel.Voivodeship, parcel.AreaHa, crop.Id.Value, crop.NamePl,
+            new ParcelInfoResponse(parcel.Id.Value, parcel.Voivodeship, parcel.AreaHa, crop.Id.Value, cropName,
                 targetDate, parcel.Geom),
             new DiagnosisResponse(assessment.RiskLevel, assessment.SummaryPl, assessment.HistoricalContextPl,
                 assessment.Metrics),

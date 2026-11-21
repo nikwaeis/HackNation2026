@@ -1,4 +1,3 @@
-using System.Globalization;
 using WodoPlon.Domain.Entities;
 using WodoPlon.Domain.Enums;
 
@@ -14,7 +13,7 @@ public sealed record RetentionMeasure(RetentionType Type, string Title, string D
 
 public sealed record IrrigationAdvice(bool IsRecommended, string AdvicePl, decimal? DoseMm);
 
-/// <summary> Step 2 (causes → retention measures, priority) and step 3 (irrigation, last resort); texts are Polish </summary>
+/// <summary> Step 2 (causes → retention measures, priority) and step 3 (irrigation, last resort) </summary>
 public static class Recommendations
 {
     public const decimal LowRainShareOfNorm = 0.75m;
@@ -28,30 +27,27 @@ public static class Recommendations
     /// <summary> One dose refills this share of the root zone capacity </summary>
     public const decimal DoseShareOfAwc = 0.3m;
 
-    private static readonly string[] MonthsPl =
-        ["styczeń", "luty", "marzec", "kwiecień", "maj", "czerwiec", "lipiec", "sierpień", "wrzesień", "październik", "listopad", "grudzień"];
-
     public static (string[] CausesPl, RetentionMeasure[] Measures) Retention(ParcelStaticProfile profile,
-        DynamicObservation observation)
+        DynamicObservation observation, ReportText text)
     {
         var causes = new List<string>();
         var measures = new List<RetentionMeasure>();
 
         // trigger 1: weather deficit
         decimal precip = observation.Precip90dMm ?? 0;
+        decimal? norm = observation.Precip10yrAvg90dMm;
         int drySpell = observation.DrySpellDays ?? 0;
-        bool lowRain = precip < LowRainShareOfNorm * observation.Precip10yrAvg90dMm;
+        bool lowRain = precip < LowRainShareOfNorm * norm;
         bool longDrySpell = drySpell >= LongDrySpellDays;
         if (lowRain || longDrySpell)
         {
             causes.Add((lowRain, longDrySpell) switch
             {
-                (true, true) => Text($"Niskie opady ({precip:0.0} mm wobec normy {observation.Precip10yrAvg90dMm:0.0} mm) oraz {drySpell} dni bez opadów."),
-                (true, false) => Text($"Niskie opady w ostatnich 90 dniach ({precip:0.0} mm wobec normy {observation.Precip10yrAvg90dMm:0.0} mm)."),
-                _ => Text($"Długi okres bez opadów: {drySpell} dni z rzędu z opadem poniżej 1 mm.")
+                (true, true) => text["Report.Cause.LowRainAndDrySpell", precip, norm, drySpell],
+                (true, false) => text["Report.Cause.LowRain", precip, norm],
+                _ => text["Report.Cause.DrySpell", drySpell]
             });
-            measures.Add(new(RetentionType.Soil, "Mulczowanie i pozostawienie resztek pożniwnych",
-                "Okrywa z resztek roślinnych ogranicza bezproduktywne parowanie wody z powierzchni gleby."));
+            measures.Add(Measure(text, RetentionType.Soil, "Mulch"));
         }
 
         // trigger 2: soil holds little water
@@ -60,14 +56,14 @@ public static class Recommendations
         bool sandy = sand > SoilAwc.SandyThresholdPct;
         bool lowHumus = soc < SoilAwc.LowOrganicCarbonGKg;
         if (sandy)
-            causes.Add(Text($"Gleba lekka, piaszczysta ({sand:0}% piasku) o niskiej pojemności wodnej."));
+            causes.Add(text["Report.Cause.Sandy", sand]);
         if (lowHumus)
-            causes.Add(Text($"Niska zawartość materii organicznej ({soc:0.0} g/kg) ogranicza zatrzymywanie wody w glebie."));
+            causes.Add(text["Report.Cause.LowHumus", soc]);
         if (sandy || lowHumus)
-            measures.Add(new(RetentionType.Soil, "Międzyplony i uprawa bezorkowa",
+            measures.Add(new(RetentionType.Soil, text["Report.Measure.CoverCrops.Title"],
                 lowHumus
-                    ? Text($"Międzyplony i ograniczenie orki zwiększą zawartość próchnicy (obecnie niska: {soc:0.0} g/kg) i pojemność wodną gleby.")
-                    : "Międzyplony i ograniczenie orki zwiększą zawartość próchnicy i pojemność wodną lekkiej gleby."));
+                    ? text["Report.Measure.CoverCrops.DescriptionLowHumus", soc]
+                    : text["Report.Measure.CoverCrops.Description"]));
 
         // trigger 3: surface runoff from the slope
         decimal? slope = profile.MeanSlopeDeg;
@@ -75,26 +71,24 @@ public static class Recommendations
         if (slope > SteepSlopeDeg || steep > SteepAreaPct)
         {
             causes.Add(slope > SteepSlopeDeg
-                ? Text($"Nachylenie terenu ({slope:0.0}°) przyspiesza spływ powierzchniowy.")
-                : Text($"{steep:0}% powierzchni działki ma spadek powyżej 3°, co przyspiesza spływ wody opadowej."));
-            measures.Add(new(RetentionType.Landscape, "Uprawa poprzeczna do stoku i strefy buforowe",
-                "Uprawa w poprzek stoku, pasy zadarnione oraz małe zbiorniki u podnóża stoku zatrzymają wodę z ulewnych opadów."));
+                ? text["Report.Cause.Slope", slope]
+                : text["Report.Cause.SteepArea", steep]);
+            measures.Add(Measure(text, RetentionType.Landscape, "Contour"));
         }
 
         // trigger 4: drainage ditch takes groundwater away
         decimal? distance = profile.NearestWaterDistM;
         if (profile.NearestWaterType == HydroFeatureType.Ditch && distance <= DitchInfluenceM)
         {
-            causes.Add(Text($"Rów melioracyjny w odległości {distance:0} m przyspiesza odpływ wód gruntowych z działki."));
-            measures.Add(new(RetentionType.Landscape, Text($"Zastawki na rowie melioracyjnym ({distance:0} m od działki)"),
-                "Spowolnienie odpływu wody w pobliskim rowie podniesie poziom wód gruntowych w strefie korzeniowej."));
+            causes.Add(text["Report.Cause.Ditch", distance]);
+            measures.Add(new(RetentionType.Landscape, text["Report.Measure.DitchDam.Title", distance],
+                text["Report.Measure.DitchDam.Description"]));
         }
 
         if (measures.Count == 0)
         {
-            causes.Add("Nie stwierdzono czynników pogłębiających niedobór wody na działce.");
-            measures.Add(new(RetentionType.Soil, "Utrzymanie okrywy roślinnej",
-                "Pozostawianie resztek pożniwnych i unikanie gołej gleby utrzyma obecny stan uwilgotnienia."));
+            causes.Add(text["Report.Cause.None"]);
+            measures.Add(Measure(text, RetentionType.Soil, "KeepCover"));
         }
 
         // landscape measures first: they hold the water before it leaves the field
@@ -103,24 +97,23 @@ public static class Recommendations
 
     // api.md condition 3 ("retention cannot compensate the deficit now") always holds: retention measures work over seasons
     public static IrrigationAdvice Irrigation(WaterDeficitLevel level, Crop crop, DateOnly targetDate, decimal? ndwi,
-        decimal? awcMmPerM)
+        decimal? awcMmPerM, ReportText text)
     {
         if (level is not (WaterDeficitLevel.High or WaterDeficitLevel.Critical))
-            return new(false, "Nawadnianie nie jest obecnie potrzebne. Priorytetem pozostaje zatrzymanie wody w glebie i krajobrazie.", null);
+            return new(false, text["Report.Irrigation.NotNeeded"], null);
 
         if (!crop.IsCriticalMonth(targetDate.Month) && !(ndwi < WaterBalance.SevereStressNdwi))
         {
-            string months = string.Join(", ", crop.CriticalMonths.Select(m => MonthsPl[m - 1]));
-            return new(false, $"Mimo niedoboru wody nawadnianie nie jest zalecane poza krytycznym okresem wzrostu uprawy ({months}). Priorytetem są zabiegi zatrzymujące wodę w glebie.", null);
+            string months = string.Join(", ", crop.CriticalMonths.Select(text.Month));
+            return new(false, text["Report.Irrigation.OutsideCriticalMonths", months], null);
         }
 
         decimal awcRoot = (awcMmPerM ?? SoilAwc.LoamAwcMmPerM) * crop.RootDepthCm / 100m;
         decimal dose = Math.Round(Math.Clamp(DoseShareOfAwc * awcRoot, MinDoseMm, MaxDoseMm));
 
-        return new(true, Text($"Nawadnianie interwencyjne uzasadnione w krytycznym okresie wzrostu: jednorazowa dawka {dose:0} mm ({dose * 10:0} m³/ha), podawana rano lub wieczorem, wyłącznie po wdrożeniu zabiegów ograniczających parowanie."),
-            dose);
+        return new(true, text["Report.Irrigation.Recommended", dose, dose * 10], dose);
     }
 
-    // report numbers use a dot, as in the api.md contract
-    internal static string Text(FormattableString text) => text.ToString(CultureInfo.InvariantCulture);
+    private static RetentionMeasure Measure(ReportText text, RetentionType type, string key) =>
+        new(type, text[$"Report.Measure.{key}.Title"], text[$"Report.Measure.{key}.Description"]);
 }

@@ -15,7 +15,7 @@ public static class ExternalApiExtension
         services.AddExternalClient<IUldkClient, UldkClient>(s => s.UldkBaseUrl);
         services.AddExternalClient<IOpenMeteoClient, OpenMeteoClient>(s => s.OpenMeteoBaseUrl);
         services.AddExternalClient<ISoilGridsClient, SoilGridsClient>(s => s.SoilGridsBaseUrl);
-        services.AddExternalClient<IOverpassClient, OverpassClient>(s => s.OverpassBaseUrl);
+        services.AddExternalClient<IOverpassClient, OverpassClient>(s => s.OverpassBaseUrl, s => s.OverpassTimeoutSeconds);
 
         services.AddHttpClient<IPythonServiceClient, PythonServiceClient>((sp, client) =>
         {
@@ -28,14 +28,14 @@ public static class ExternalApiExtension
     }
 
     private static void AddExternalClient<TClient, TImplementation>(this IServiceCollection services,
-        Func<ExternalApisSettings, string> baseUrl)
+        Func<ExternalApisSettings, string> baseUrl, Func<ExternalApisSettings, int>? timeoutSeconds = null)
         where TClient : class
         where TImplementation : class, TClient =>
         services.AddHttpClient<TClient, TImplementation>((sp, client) =>
         {
             var settings = sp.GetRequiredService<IOptions<ExternalApisSettings>>().Value;
             client.BaseAddress = new Uri(baseUrl(settings));
-            client.Timeout = TimeSpan.FromSeconds(settings.TimeoutSeconds);
+            client.Timeout = TimeSpan.FromSeconds(timeoutSeconds?.Invoke(settings) ?? settings.TimeoutSeconds);
             client.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent);
         });
 }
