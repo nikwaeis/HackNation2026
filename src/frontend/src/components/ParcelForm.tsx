@@ -1,5 +1,6 @@
-import { MapPin, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 import type { CropResponse } from '../types/api';
+import type { UldkResolvedParcel } from '../api/uldk';
 import {
   CROP_NAMES_EN,
   MONTHS_EN,
@@ -7,7 +8,6 @@ import {
   type Language,
   type TranslationDict,
 } from '../i18n/translations';
-import { SAMPLE_PARCEL_ID } from '../api/mockData';
 
 interface ParcelFormProps {
   t: TranslationDict;
@@ -15,8 +15,9 @@ interface ParcelFormProps {
   crops: CropResponse[];
   dzialkaId: string;
   onChangeDzialkaId: (val: string) => void;
-  selectedPoint: { lat: number; lon: number } | null;
-  onClearPoint: () => void;
+  onInsertSample: () => void;
+  selectedParcel: UldkResolvedParcel | null;
+  onClearSelectedParcel: () => void;
   cropId: string;
   onChangeCropId: (id: string) => void;
   targetDate: string;
@@ -35,8 +36,9 @@ export function ParcelForm({
   crops,
   dzialkaId,
   onChangeDzialkaId,
-  selectedPoint,
-  onClearPoint,
+  onInsertSample,
+  selectedParcel,
+  onClearSelectedParcel,
   cropId,
   onChangeCropId,
   targetDate,
@@ -57,6 +59,10 @@ export function ParcelForm({
     { label: t.dateSummer2022, value: '2022-07-15' },
   ].filter((p) => p.value >= minDate && p.value <= maxDate);
 
+  const locationLine = selectedParcel
+    ? [selectedParcel.commune, selectedParcel.voivodeship].filter(Boolean).join(', ')
+    : null;
+
   return (
     <form onSubmit={onSubmit} noValidate className="flex flex-col gap-5">
       <div className="space-y-1.5">
@@ -71,16 +77,25 @@ export function ParcelForm({
         </p>
       </div>
 
-      {/* Step 1: Parcel ID or Map Point */}
+      {/* Step 1: Parcel ID or highlighted parcel sector from map */}
       <fieldset className="flex flex-col gap-2.5 border-0 p-0">
         <div className="flex items-baseline justify-between gap-2">
           <legend className="p-0 text-sm font-bold" style={{ color: 'var(--ink-primary)' }}>
             {t.step1Label}
           </legend>
-          {!selectedPoint && (
+          {selectedParcel ? (
             <button
               type="button"
-              onClick={() => onChangeDzialkaId(SAMPLE_PARCEL_ID)}
+              onClick={onClearSelectedParcel}
+              className="text-xs font-semibold underline underline-offset-4"
+              style={{ color: 'var(--ink-secondary)' }}
+            >
+              {t.clearMapPoint}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onInsertSample}
               className="text-xs font-semibold underline underline-offset-4"
               style={{ color: 'var(--ink-secondary)' }}
             >
@@ -89,57 +104,31 @@ export function ParcelForm({
           )}
         </div>
 
-        {selectedPoint ? (
-          <div
-            className="flex items-center justify-between gap-3 rounded-lg px-4 py-3"
-            style={{ backgroundColor: 'var(--bg-field)' }}
-          >
-            <div className="flex min-w-0 items-center gap-2.5">
-              <MapPin
-                className="h-4 w-4 shrink-0"
-                style={{ color: 'var(--ink-primary)' }}
-                strokeWidth={1.9}
-                aria-hidden="true"
-              />
-              <div className="min-w-0">
-                <p className="text-sm font-semibold" style={{ color: 'var(--ink-primary)' }}>
-                  {t.mapPointSelected}
-                </p>
-                <p className="tabular-nums text-xs" style={{ color: 'var(--ink-secondary)' }}>
-                  {selectedPoint.lat.toFixed(5)}° N, {selectedPoint.lon.toFixed(5)}° E
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={onClearPoint}
-              className="shrink-0 text-sm font-semibold underline underline-offset-4"
-              style={{ color: 'var(--ink-primary)' }}
-            >
-              {t.clearMapPoint}
-            </button>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2">
-            <label htmlFor="dzialka-id-input" className="sr-only">
-              {t.parcelInputLabel}
-            </label>
-            <input
-              id="dzialka-id-input"
-              type="text"
-              inputMode="text"
-              autoComplete="off"
-              spellCheck={false}
-              value={dzialkaId}
-              onChange={(e) => onChangeDzialkaId(e.target.value)}
-              placeholder={t.parcelInputPlaceholder}
-              className="input-well tabular-nums h-11 w-full rounded-lg px-3.5 text-sm font-medium"
-            />
+        <div className="flex flex-col gap-2">
+          <label htmlFor="dzialka-id-input" className="sr-only">
+            {t.parcelInputLabel}
+          </label>
+          <input
+            id="dzialka-id-input"
+            type="text"
+            inputMode="text"
+            autoComplete="off"
+            spellCheck={false}
+            value={dzialkaId}
+            onChange={(e) => onChangeDzialkaId(e.target.value)}
+            placeholder={t.parcelInputPlaceholder}
+            className="input-well tabular-nums h-11 w-full rounded-lg px-3.5 text-sm font-medium"
+          />
+          {locationLine ? (
+            <p className="text-xs font-medium leading-relaxed" style={{ color: 'var(--brand-primary)' }}>
+              {t.mapPointSelected}: {locationLine}
+            </p>
+          ) : (
             <p className="text-xs leading-relaxed" style={{ color: 'var(--ink-muted)' }}>
               {t.parcelInputHelp}
             </p>
-          </div>
-        )}
+          )}
+        </div>
       </fieldset>
 
       {/* Step 2: Crop selection */}
@@ -200,7 +189,7 @@ export function ParcelForm({
         )}
       </fieldset>
 
-      {/* Step 3: Assessment date — native browser calendar icon only (no duplicate icon) */}
+      {/* Step 3: Assessment date */}
       <fieldset className="flex flex-col gap-2.5 border-0 p-0">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <legend className="p-0 text-sm font-bold" style={{ color: 'var(--ink-primary)' }}>

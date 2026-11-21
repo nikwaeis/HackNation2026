@@ -9,8 +9,8 @@ export const FALLBACK_CROPS: CropResponse[] = [
   { id: 'potato', namePl: 'Ziemniak', kcMid: 1.15, criticalMonths: [6, 7], rootDepthCm: 60 },
 ];
 
-/** Sample cadastral parcel ID (Kujawsko-Pomorskie, near Bydgoszcz — HackNation 2026 host region) */
-export const SAMPLE_PARCEL_ID = '040302_2.0005.124/2';
+/** Verified real agricultural parcel ID (Zaręby Kościelne, mazowieckie) */
+export const SAMPLE_PARCEL_ID = '141611_2.0018.103';
 
 /** Realistic demo report matching docs/api.md §3.2 — ONLY shown when user clicks "Open sample report" */
 export const SAMPLE_DEMO_REPORT: AnalysisResponse = {
