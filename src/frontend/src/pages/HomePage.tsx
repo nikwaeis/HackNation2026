@@ -34,10 +34,12 @@ function isoDate(d: Date): string {
 const IDLE_LOOKUP: ParcelLookup = { status: 'idle', source: null, parcel: null };
 
 /**
- * Open straight on farmland (Kujawy plain near Inowrocław, kujawsko-pomorskie) instead of the whole country,
- * so the clickable fields are visible right away; "Show all of Poland" / "My location" are on the map.
+ * Open straight on farmland instead of the whole country, so the clickable fields are visible right away.
+ * Arable land south-east of Lubowidz (powiat żuromiński, mazowieckie): this county publishes EGiB land-use
+ * classes (checked 2026-11-21: RIVa / RIVb / RV around the centre), so the land-type check has data here.
+ * Zoom 17 is the smallest zoom at which GUGiK draws parcel boundaries. "Show all of Poland" is on the map.
  */
-const START_VIEW: { center: [number, number]; zoom: number } = { center: [52.718, 18.345], zoom: 15 };
+const START_VIEW: { center: [number, number]; zoom: number } = { center: [53.116, 19.8665], zoom: 17 };
 
 export function HomePage({ t, lang }: HomePageProps) {
   const navigate = useNavigate();

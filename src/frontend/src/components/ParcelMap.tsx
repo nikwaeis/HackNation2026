@@ -31,10 +31,13 @@ import { LocalProjection, bboxOf, interiorGrid, labelPoint, type LatLon } from '
 export const POLAND_CENTER: [number, number] = [52.06, 18.6];
 export const POLAND_ZOOM = 6;
 
-/** Cadastral parcel boundaries (GUGiK KIEG WMS) are only rendered from this zoom */
-const PARCELS_MIN_ZOOM = 14;
+/**
+ * GUGiK KIEG WMS draws parcel boundaries only at large scales: measured 2026-11-21, a 256 px tile at
+ * ~0.8 m/px (Leaflet zoom 17 in Poland) has lines, at ~1.4 m/px (zoom 16) it comes back empty/transparent.
+ */
+const PARCELS_MIN_ZOOM = 17;
 /** Parcel numbers get legible from this zoom */
-const PARCEL_NUMBERS_MIN_ZOOM = 17;
+const PARCEL_NUMBERS_MIN_ZOOM = 18;
 /** Viewport-wide fields and ditches are fetched from this zoom (keeps the Overpass box small) */
 const VIEW_CONTEXT_MIN_ZOOM = 14;
 /** Clicking below this zoom only zooms in — a single field is not identifiable at country scale */
@@ -732,7 +735,7 @@ export function ParcelMap({
       )}
 
       {/* Zoom hint for cadastral parcels */}
-      {showParcels && zoom < 14 && (
+      {showParcels && zoom < PARCELS_MIN_ZOOM && (
         <div className={`pointer-events-none absolute bottom-24 left-4 right-4 z-[400] flex justify-start ${overlayOffsetClass}`}>
           <div className="glass-panel px-3.5 py-2 text-sm font-medium">{t.zoomInForParcels}</div>
         </div>

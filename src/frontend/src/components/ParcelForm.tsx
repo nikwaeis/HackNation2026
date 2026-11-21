@@ -25,7 +25,7 @@ import {
   type Language,
   type TranslationDict,
 } from '../i18n/translations';
-import { SAMPLE_PARCEL_ID } from '../api/mockData';
+import { EXAMPLE_FIELD_PARCEL_ID } from '../api/mockData';
 
 export type TerritoryCheck = { status: 'checking' } | { status: 'done'; verdict: TerritoryVerdict };
 
@@ -252,7 +252,7 @@ export function ParcelForm({
           label={t.step1Label}
           aside={
             !selectedPoint && (
-              <button type="button" onClick={() => onChangeDzialkaId(SAMPLE_PARCEL_ID)} className="link-btn text-xs">
+              <button type="button" onClick={() => onChangeDzialkaId(EXAMPLE_FIELD_PARCEL_ID)} className="link-btn text-xs">
                 {t.trySampleParcel}
               </button>
             )

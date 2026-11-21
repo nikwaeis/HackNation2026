@@ -9,8 +9,14 @@ export const FALLBACK_CROPS: CropResponse[] = [
   { id: 'potato', namePl: 'Ziemniak', kcMid: 1.15, criticalMonths: [6, 7], rootDepthCm: 60 },
 ];
 
-/** Sample cadastral parcel ID (Kujawsko-Pomorskie, near Bydgoszcz — HackNation 2026 host region) */
+/** Sample cadastral parcel ID used by the demo report (Kujawsko-Pomorskie, near Bydgoszcz — HackNation 2026 host region) */
 export const SAMPLE_PARCEL_ID = '040302_2.0005.124/2';
+
+/**
+ * Real arable parcel in the start view (Lubowidz, mazowieckie; EGiB classes RIVb/RV/RVI) inserted by
+ * "Wstaw przykładową działkę", so the example lands on the map the farmer is already looking at.
+ */
+export const EXAMPLE_FIELD_PARCEL_ID = '143703_4.0001.1251';
 
 /** Realistic demo report matching docs/api.md §3.2 — ONLY shown when user clicks "Open sample report" */
 export const SAMPLE_DEMO_REPORT: AnalysisResponse = {

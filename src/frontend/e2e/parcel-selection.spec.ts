@@ -58,7 +58,26 @@ test('opens on farmland with parcel boundaries, not on the whole of Poland', asy
   await expect(page.getByRole('button', { name: 'Granice działek' })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('button', { name: 'Zdjęcie lotnicze' })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('.kieg-on-photo')).toHaveCount(1);
+
+  // GUGiK must actually DRAW boundaries at the start zoom (it returns ~116-byte empty PNGs below zoom 17)
+  await expect(page.locator('.kieg-on-photo img').first()).toBeVisible();
+  const tileBytes = await page.evaluate(async () => {
+    const imgs = Array.from(document.querySelectorAll<HTMLImageElement>('.kieg-on-photo img')).slice(0, 6);
+    const sizes = await Promise.all(imgs.map(async (img) => (await (await fetch(img.src)).arrayBuffer()).byteLength));
+    return Math.max(...sizes);
+  });
+  expect(tileBytes).toBeGreaterThan(500);
+  await page.waitForTimeout(2500); // let the orthophoto tiles paint for the screenshot
   await shot(page, '01-start-view');
+});
+
+test('"Wstaw przykładową działkę" lands on an arable field in the start view with EGiB data', async ({ page }) => {
+  await page.getByRole('button', { name: 'Wstaw przykładową działkę' }).click();
+  await expect(page.locator('.parcel-tag__title')).toHaveText('143703_4.0001.1251');
+  await expect(page.getByText(/Grunty orne/)).toBeVisible();
+  await expect(page.getByText('Wybrany obszar wygląda na teren zabudowany', { exact: false })).toHaveCount(0);
+  await page.waitForTimeout(2500);
+  await shot(page, '01b-example-field');
 });
 
 test('click on a HOUSE plot: outline + EGiB warning, analysis blocked until confirmed', async ({ page }) => {
