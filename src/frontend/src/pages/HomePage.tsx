@@ -1,7 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ApiError, analyzeParcel, fetchCrops } from '../api/client';
-import { FALLBACK_CROPS, SAMPLE_DEMO_REPORT } from '../api/mockData';
+import { FALLBACK_CROPS, SAMPLE_DEMO_REPORT, SAMPLE_PARCEL_ID } from '../api/mockData';
+import {
+  lookupParcelById,
+  lookupParcelByPoint,
+  type UldkResolvedParcel,
+} from '../api/uldk';
 import type { CropResponse } from '../types/api';
 import type { Language, TranslationDict } from '../i18n/translations';
 import { ParcelForm } from '../components/ParcelForm';
@@ -34,13 +39,19 @@ export function HomePage({ t, lang }: HomePageProps) {
 
   const [crops, setCrops] = useState<CropResponse[]>(FALLBACK_CROPS);
   const [dzialkaId, setDzialkaId] = useState('');
-  const [selectedPoint, setSelectedPoint] = useState<{ lat: number; lon: number } | null>(null);
+  const [selectedParcel, setSelectedParcel] = useState<UldkResolvedParcel | null>(null);
+  const [clickedCoords, setClickedCoords] = useState<{ lat: number; lon: number } | null>(null);
+  const [resolvingParcel, setResolvingParcel] = useState(false);
+  const [mapError, setMapError] = useState<string | null>(null);
+
   const [cropId, setCropId] = useState(FALLBACK_CROPS[0].id);
   const [targetDate, setTargetDate] = useState(maxDate);
 
   const [validationError, setValidationError] = useState<string | null>(null);
   const [apiError, setApiError] = useState<{ message: string; canDemo: boolean } | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const lookupAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -58,20 +69,87 @@ export function HomePage({ t, lang }: HomePageProps) {
     };
   }, [lang]);
 
+  useEffect(() => {
+    return () => {
+      lookupAbortRef.current?.abort();
+    };
+  }, []);
+
   function handleDzialkaChange(val: string) {
     setDzialkaId(val);
-    if (val.trim().length > 0 && selectedPoint) {
-      setSelectedPoint(null);
+    if (selectedParcel && val.trim() !== selectedParcel.dzialkaId) {
+      setSelectedParcel(null);
+      setClickedCoords(null);
     }
+    setMapError(null);
     setValidationError(null);
     setApiError(null);
   }
 
-  function handleSelectMapPoint(lat: number, lon: number) {
-    setSelectedPoint({ lat, lon });
+  function handleClearSelectedParcel() {
+    lookupAbortRef.current?.abort();
+    setSelectedParcel(null);
+    setClickedCoords(null);
     setDzialkaId('');
+    setMapError(null);
+    setResolvingParcel(false);
+  }
+
+  async function handleInsertSample() {
+    lookupAbortRef.current?.abort();
+    const controller = new AbortController();
+    lookupAbortRef.current = controller;
+
+    setDzialkaId(SAMPLE_PARCEL_ID);
     setValidationError(null);
     setApiError(null);
+    setMapError(null);
+    setResolvingParcel(true);
+
+    try {
+      const resolved = await lookupParcelById(SAMPLE_PARCEL_ID, controller.signal);
+      if (resolved) {
+        setSelectedParcel(resolved);
+        setDzialkaId(resolved.dzialkaId);
+      }
+    } catch {
+      // Keep the sample ID in the field even if ULDK is temporarily unreachable
+    } finally {
+      if (!controller.signal.aborted) {
+        setResolvingParcel(false);
+      }
+    }
+  }
+
+  async function handleSelectMapPoint(lat: number, lon: number) {
+    lookupAbortRef.current?.abort();
+    const controller = new AbortController();
+    lookupAbortRef.current = controller;
+
+    setClickedCoords({ lat, lon });
+    setMapError(null);
+    setValidationError(null);
+    setApiError(null);
+    setResolvingParcel(true);
+
+    try {
+      const resolved = await lookupParcelByPoint(lat, lon, controller.signal);
+      if (!resolved) {
+        setSelectedParcel(null);
+        setClickedCoords(null);
+        setMapError(t.mapParcelNotFound);
+        return;
+      }
+      setSelectedParcel(resolved);
+      setDzialkaId(resolved.dzialkaId);
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      setMapError(t.mapParcelNotFound);
+    } finally {
+      if (!controller.signal.aborted) {
+        setResolvingParcel(false);
+      }
+    }
   }
 
   function openDemoReport() {
@@ -80,7 +158,7 @@ export function HomePage({ t, lang }: HomePageProps) {
 
   async function runAnalysis() {
     const trimmedId = dzialkaId.trim();
-    if (!trimmedId && !selectedPoint) {
+    if (!trimmedId && !clickedCoords) {
       setValidationError(t.errorNoLocation);
       return;
     }
@@ -101,8 +179,8 @@ export function HomePage({ t, lang }: HomePageProps) {
       const report = await analyzeParcel(
         {
           dzialkaId: trimmedId ? trimmedId : null,
-          lat: selectedPoint ? selectedPoint.lat : null,
-          lon: selectedPoint ? selectedPoint.lon : null,
+          lat: trimmedId ? null : (clickedCoords?.lat ?? null),
+          lon: trimmedId ? null : (clickedCoords?.lon ?? null),
           cropId,
           targetDate,
         },
@@ -144,7 +222,7 @@ export function HomePage({ t, lang }: HomePageProps) {
       id="main-content"
       className="relative flex w-full flex-col lg:h-[calc(100vh-65px)] lg:overflow-hidden"
     >
-      {/* Full-bleed interactive Poland map on desktop; top canvas on mobile */}
+      {/* Full-bleed interactive Poland map */}
       <section
         aria-label={t.layerMap}
         className="h-[340px] w-full sm:h-[400px] lg:absolute lg:inset-0 lg:h-full"
@@ -152,13 +230,15 @@ export function HomePage({ t, lang }: HomePageProps) {
         <ParcelMap
           t={t}
           interactive
-          selectedPoint={selectedPoint}
-          onSelectPoint={handleSelectMapPoint}
+          onSelectPoint={(lat, lon) => void handleSelectMapPoint(lat, lon)}
+          resolvingParcel={resolvingParcel}
+          mapError={mapError}
+          polygon={selectedParcel?.geometry ?? null}
           className="h-full"
         />
       </section>
 
-      {/* Floating elevated search sheet (Setproduct map-first composition) */}
+      {/* Floating elevated search sheet */}
       <aside
         aria-label={t.formTitle}
         className="relative z-10 w-full px-4 py-5 sm:px-6 lg:pointer-events-none lg:flex lg:h-full lg:max-w-[1440px] lg:items-start lg:p-5"
@@ -187,8 +267,9 @@ export function HomePage({ t, lang }: HomePageProps) {
             crops={crops}
             dzialkaId={dzialkaId}
             onChangeDzialkaId={handleDzialkaChange}
-            selectedPoint={selectedPoint}
-            onClearPoint={() => setSelectedPoint(null)}
+            onInsertSample={() => void handleInsertSample()}
+            selectedParcel={selectedParcel}
+            onClearSelectedParcel={handleClearSelectedParcel}
             cropId={cropId}
             onChangeCropId={setCropId}
             targetDate={targetDate}

@@ -3,52 +3,42 @@ import L from 'leaflet';
 import {
   GeoJSON,
   MapContainer,
-  Marker,
   TileLayer,
   WMSTileLayer,
   ZoomControl,
   useMap,
   useMapEvents,
 } from 'react-leaflet';
-import { CloudRain, Grid2x2, Layers, Map as MapIcon } from 'lucide-react';
+import { CloudRain, Grid2x2, Layers, Loader2, Map as MapIcon } from 'lucide-react';
 import type { ParcelGeometry, WaterDeficitLevel } from '../types/api';
 import type { TranslationDict } from '../i18n/translations';
 
 const POLAND_CENTER: [number, number] = [52.06, 18.6];
 const POLAND_ZOOM = 6;
 
-const SELECTED_PIN_ICON = L.divIcon({
-  className: 'wodoplon-map-pin',
-  html: `<svg width="32" height="40" viewBox="0 0 32 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M16 2C8.82 2 3 7.82 3 15C3 24.75 16 38 16 38C16 38 29 24.75 29 15C29 7.82 23.18 2 16 2Z" fill="#1D6FA5" stroke="#FFFFFF" stroke-width="2.5"/>
-    <circle cx="16" cy="14.5" r="4.5" fill="#FFFFFF"/>
-  </svg>`,
-  iconSize: [32, 40],
-  iconAnchor: [16, 38],
-});
-
 interface ParcelMapProps {
   t: TranslationDict;
   interactive?: boolean;
-  selectedPoint?: { lat: number; lon: number } | null;
   onSelectPoint?: (lat: number, lon: number) => void;
+  resolvingParcel?: boolean;
+  mapError?: string | null;
   polygon?: ParcelGeometry | null;
   riskLevel?: WaterDeficitLevel;
   className?: string;
 }
 
-function riskPolygonColor(level?: WaterDeficitLevel): string {
+function polygonStrokeColor(level?: WaterDeficitLevel): string {
   switch (level) {
     case 'CRITICAL':
-      return '#b91c1c';
+      return '#991b1b';
     case 'HIGH':
-      return '#b83d0b';
+      return '#b91c1c';
     case 'MODERATE':
       return '#a16207';
     case 'LOW':
-      return '#146c43';
+      return '#15803d';
     default:
-      return '#1d6fa5';
+      return '#14532d';
   }
 }
 
@@ -74,7 +64,13 @@ function MapClickHandler({
   return null;
 }
 
-function FitPolygonBounds({ polygon }: { polygon: ParcelGeometry | null | undefined }) {
+function FitPolygonBounds({
+  polygon,
+  interactive,
+}: {
+  polygon: ParcelGeometry | null | undefined;
+  interactive: boolean;
+}) {
   const map = useMap();
 
   useEffect(() => {
@@ -83,16 +79,18 @@ function FitPolygonBounds({ polygon }: { polygon: ParcelGeometry | null | undefi
       const layer = L.geoJSON(polygon as GeoJSON.GeoJsonObject);
       const bounds = layer.getBounds();
       if (bounds.isValid()) {
+        const isDesktop = window.innerWidth >= 1024;
         map.fitBounds(bounds, {
-          paddingTopLeft: [28, 28],
-          paddingBottomRight: [28, 64],
+          paddingTopLeft: interactive && isDesktop ? [488, 72] : [28, 28],
+          paddingBottomRight: interactive ? [48, 84] : [28, 64],
           maxZoom: 16,
+          animate: true,
         });
       }
     } catch {
       // Ignore malformed geometry
     }
-  }, [map, polygon]);
+  }, [map, polygon, interactive]);
 
   return null;
 }
@@ -100,8 +98,9 @@ function FitPolygonBounds({ polygon }: { polygon: ParcelGeometry | null | undefi
 export function ParcelMap({
   t,
   interactive = true,
-  selectedPoint = null,
   onSelectPoint,
+  resolvingParcel = false,
+  mapError = null,
   polygon = null,
   riskLevel,
   className = 'h-[420px] lg:h-full',
@@ -112,21 +111,29 @@ export function ParcelMap({
   const [zoom, setZoom] = useState(POLAND_ZOOM);
 
   const polygonStyle = useMemo(() => {
-    const color = riskPolygonColor(riskLevel);
+    const color = polygonStrokeColor(riskLevel);
     return {
       color,
       weight: 3,
       fillColor: color,
-      fillOpacity: 0.22,
+      fillOpacity: 0.28,
     };
   }, [riskLevel]);
 
   const polygonKey = useMemo(() => (polygon ? JSON.stringify(polygon) : 'none'), [polygon]);
 
+  const hintText = resolvingParcel
+    ? t.mapResolvingParcel
+    : mapError
+      ? mapError
+      : polygon
+        ? t.mapHintSelected
+        : t.mapHint;
+
   return (
     <div
       className={`relative isolate z-0 w-full overflow-hidden ${className}`}
-      style={{ backgroundColor: '#e8eef4' }}
+      style={{ backgroundColor: '#f0f0f0' }}
     >
       <MapContainer
         center={POLAND_CENTER}
@@ -176,10 +183,7 @@ export function ParcelMap({
           />
         )}
 
-        {selectedPoint && (
-          <Marker position={[selectedPoint.lat, selectedPoint.lon]} icon={SELECTED_PIN_ICON} />
-        )}
-
+        {/* Full highlighted cadastral parcel sector — never a single dot */}
         {polygon && (
           <GeoJSON
             key={polygonKey}
@@ -189,21 +193,24 @@ export function ParcelMap({
         )}
 
         <MapClickHandler enabled={interactive} onSelect={onSelectPoint} onZoomChange={setZoom} />
-        <FitPolygonBounds polygon={polygon} />
+        <FitPolygonBounds polygon={polygon} interactive={interactive} />
       </MapContainer>
 
-      {/* Quiet non-interactive map instruction ribbon (offset on desktop for floating left form) */}
+      {/* Top instruction / resolving status ribbon */}
       {interactive && (
         <div className="pointer-events-none absolute left-4 right-16 top-4 z-[400] flex justify-start lg:left-[472px]">
           <div
-            className="rounded-full px-4 py-2 text-sm font-medium"
+            className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium"
             style={{
               backgroundColor: 'var(--bg-surface)',
-              color: 'var(--ink-secondary)',
+              color: mapError ? 'var(--risk-critical-ink)' : 'var(--ink-secondary)',
               boxShadow: 'var(--shadow-float)',
             }}
           >
-            {selectedPoint ? t.mapHintSelected : t.mapHint}
+            {resolvingParcel && (
+              <Loader2 className="h-4 w-4 shrink-0 animate-spin" strokeWidth={2} aria-hidden="true" />
+            )}
+            <span>{hintText}</span>
           </div>
         </div>
       )}
@@ -224,7 +231,7 @@ export function ParcelMap({
         </div>
       )}
 
-      {/* EDO Drought legend card (soft float, zero heavy border) */}
+      {/* EDO Drought legend card */}
       {showDrought && (
         <div
           className="no-print absolute right-14 top-4 z-[400] rounded-xl px-3.5 py-2.5 text-xs"
@@ -254,7 +261,7 @@ export function ParcelMap({
         </div>
       )}
 
-      {/* Single cohesive floating layer dock — unmistakable map toolbar */}
+      {/* Cohesive floating map layer dock */}
       <div
         className={`no-print absolute z-[400] flex items-center ${
           interactive
