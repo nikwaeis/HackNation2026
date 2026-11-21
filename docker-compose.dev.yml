@@ -59,13 +59,19 @@ services:
     volumes:
       - ./src/python-service:/app
 
-  # --- Placeholder: Frontend ---
-  # frontend:
-  #   build:
-  #     context: ./src/frontend
-  #     dockerfile: Dockerfile.dev
-  #   ports:
-  #     - "${FRONTEND_PORT:-5173}:5173"
+  frontend:
+    build:
+      context: ./src/frontend
+      dockerfile: Dockerfile.dev
+    environment:
+      VITE_API_PROXY_TARGET: http://api:8080
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    volumes:
+      - ./src/frontend:/app
+      - /app/node_modules
+    depends_on:
+      - api
 
 volumes:
   pgdata:
