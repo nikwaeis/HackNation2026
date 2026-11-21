@@ -14,7 +14,28 @@ import {
   useMap,
   useMapEvents,
 } from 'react-leaflet';
-import { CloudRain, Grid2x2, Layers, LocateFixed, Map as MapIcon, Maximize2, Navigation } from 'lucide-react';
+import {
+  AlertCircle,
+  CloudRain,
+  Grid2x2,
+  Layers,
+  Loader2,
+  LocateFixed,
+  Map as MapIcon,
+  Maximize2,
+  Navigation,
+  RotateCcw,
+  ZoomOut,
+} from 'lucide-react';
+import {
+  EDO_COARSE_ZOOM,
+  EDO_LAYER,
+  EDO_MAX_NATIVE_ZOOM,
+  EDO_TILE_SIZE,
+  EDO_WMS_URL,
+  edoTimeFor,
+  fetchLatestDekad,
+} from '../api/edo';
 import type { ParcelGeometry } from '../types/api';
 import type { TranslationDict } from '../i18n/translations';
 import {
@@ -143,6 +164,8 @@ interface ParcelMapProps {
   onViewFieldsChange?: (fields: FieldArea[] | null) => void;
   /** 'warn' draws the picked parcel in amber (looks built-up / non-agricultural) */
   selectionTone?: 'ok' | 'warn';
+  /** Date the Copernicus EDO drought layer should show (report: analysis date); default = latest dekad */
+  droughtDate?: string | null;
   /** Starting view (defaults to the whole of Poland) */
   initialView?: { center: [number, number]; zoom: number };
   /** Show cadastral parcel boundaries from the start */
@@ -235,6 +258,18 @@ function DevMapHandle({ interactive }: { interactive: boolean }) {
     const w = window as unknown as { __wodoplonMaps?: Record<string, L.Map> };
     w.__wodoplonMaps = { ...w.__wodoplonMaps, [interactive ? 'home' : 'report']: map };
   }, [map, interactive]);
+  return null;
+}
+
+/** Keeps a reference to the Leaflet map for controls rendered outside MapContainer (legend buttons) */
+function MapRef({ mapRef }: { mapRef: React.MutableRefObject<L.Map | null> }) {
+  const map = useMap();
+  useEffect(() => {
+    mapRef.current = map;
+    return () => {
+      mapRef.current = null;
+    };
+  }, [map, mapRef]);
   return null;
 }
 
@@ -366,6 +401,7 @@ export function ParcelMap({
   overlayOffsetClass = 'lg:left-[476px]',
   reserveTopRight = false,
   initialView,
+  droughtDate = null,
   onViewFieldsChange,
   selectionTone = 'ok',
   defaultShowParcels = false,
@@ -378,6 +414,37 @@ export function ParcelMap({
   const userPickedBase = useRef(false);
   const [showParcels, setShowParcels] = useState(defaultShowParcels);
   const [showDrought, setShowDrought] = useState(false);
+  const mapRef = useRef<L.Map | null>(null);
+
+  /* ---- Copernicus EDO drought layer: dekad-aligned TIME + tile status for the legend ---- */
+  // undefined = capabilities not fetched yet; null = unknown (service did not answer)
+  const [edoLatest, setEdoLatest] = useState<string | null | undefined>(undefined);
+  const [edoTiles, setEdoTiles] = useState({ loading: false, loaded: 0, failed: 0 });
+  /** bumped by "Spróbuj ponownie" to re-create the layer and re-request its tiles */
+  const [edoAttempt, setEdoAttempt] = useState(0);
+
+  useEffect(() => {
+    if (!showDrought || edoLatest !== undefined) return;
+    let active = true;
+    fetchLatestDekad().then((latest) => {
+      if (active) setEdoLatest(latest);
+    });
+    return () => {
+      active = false;
+    };
+  }, [showDrought, edoLatest]);
+
+  const edoReady = edoLatest !== undefined;
+  const edoTime = edoReady ? edoTimeFor(droughtDate, edoLatest) : null;
+  const edoStatus: 'loading' | 'error' | 'partial' | 'ok' = !edoReady
+    ? 'loading'
+    : edoTiles.failed > 0 && edoTiles.loaded === 0
+      ? 'error'
+      : edoTiles.loading && edoTiles.loaded + edoTiles.failed === 0
+        ? 'loading'
+        : edoTiles.failed > 0
+          ? 'partial'
+          : 'ok';
   const [zoom, setZoom] = useState(startZoom);
   const [viewCtx, setViewCtx] = useState<ViewContext | null>(null);
   const [viewStatus, setViewStatus] = useState<ViewStatus>('idle');
@@ -517,7 +584,7 @@ export function ParcelMap({
       className={`relative isolate z-0 w-full overflow-hidden ${reserveTopRight ? 'map-reserve-top-right' : ''} ${
         interactive ? 'map-pickable' : ''
       } ${className}`}
-      style={{ backgroundColor: '#dfe6dd' }}
+      style={{ backgroundColor: 'var(--map-bg)' }}
     >
       <HatchDefs />
       <MapContainer
@@ -527,6 +594,9 @@ export function ParcelMap({
         maxZoom={19}
         zoomControl={false}
         scrollWheelZoom
+        // Leaflet's default Shift+drag box-zoom made Shift change what a press on the map does;
+        // a parcel is picked with a plain click, so Shift has no special meaning here.
+        boxZoom={false}
         className="h-full w-full"
       >
         <ZoomControl position="topright" />
@@ -600,14 +670,29 @@ export function ParcelMap({
           </Pane>
         )}
 
-        {showDrought && (
+        {showDrought && edoReady && (
           <WMSTileLayer
-            url="https://drought.emergency.copernicus.eu/api/wms"
-            layers="cdiad"
+            key={`edo-${edoTime ?? 'default'}-${edoAttempt}`}
+            url={EDO_WMS_URL}
+            layers={EDO_LAYER}
             format="image/png"
             transparent
             opacity={0.56}
+            tileSize={EDO_TILE_SIZE}
+            maxNativeZoom={EDO_MAX_NATIVE_ZOOM}
+            // the EDO server is case-sensitive: Leaflet's default lower-case "service=…&request=…" gets
+            // HTTP 400 (an HTML page that Chrome blocks as ERR_BLOCKED_BY_ORB), so every tile used to fail
+            uppercase
+            maxZoom={19}
+            // TIME must be an exact dekad (1st / 11th / 21st) or the server answers 400 for every tile
+            params={{ layers: EDO_LAYER, ...(edoTime ? { TIME: edoTime } : {}) }}
             attribution="Copernicus EDO"
+            eventHandlers={{
+              loading: () => setEdoTiles({ loading: true, loaded: 0, failed: 0 }),
+              load: () => setEdoTiles((s) => ({ ...s, loading: false })),
+              tileload: () => setEdoTiles((s) => ({ ...s, loaded: s.loaded + 1 })),
+              tileerror: () => setEdoTiles((s) => ({ ...s, failed: s.failed + 1 })),
+            }}
           />
         )}
 
@@ -707,6 +792,7 @@ export function ParcelMap({
         />
         <ViewportContext enabled={showViewportWater} onChange={handleViewContext} />
         <DevMapHandle interactive={interactive} />
+        <MapRef mapRef={mapRef} />
         {interactive && <MapShortcuts t={t} reserveTopRight={reserveTopRight} />}
         <FitPolygonBounds
           polygon={focus}
@@ -743,7 +829,11 @@ export function ParcelMap({
 
       {/* Legend for the highlighted parcel overlays */}
       {(showLegend || showDrought) && (
-        <div className="glass-panel no-print absolute bottom-24 right-3 z-[400] hidden max-w-[260px] flex-col gap-2 px-3.5 py-3 text-xs sm:flex">
+        <div
+          className={`glass-panel no-print absolute bottom-24 right-3 z-[400] max-w-[280px] flex-col gap-2 px-3.5 py-3 text-xs sm:flex ${
+            showDrought ? 'flex' : 'hidden'
+          }`}
+        >
           {showLegend && (
             <>
               {focus && (
@@ -781,8 +871,33 @@ export function ParcelMap({
             </>
           )}
           {showDrought && (
-            <div className={showLegend ? 'mt-1 border-t pt-2' : ''} style={{ borderColor: 'var(--hairline)' }}>
+            <div
+              className={showLegend ? 'mt-1 border-t pt-2' : ''}
+              style={{ borderColor: 'var(--hairline)' }}
+              data-testid="edo-legend"
+              data-status={edoStatus}
+            >
               <p className="font-semibold">{t.edoLegendTitle}</p>
+              <p aria-live="polite" className="mt-1 flex items-start gap-1.5 leading-snug" style={{ color: edoStatus === 'error' || edoStatus === 'partial' ? 'var(--warn-ink)' : 'var(--ink-secondary)' }}>
+                {edoStatus === 'loading' && <Loader2 className="mt-px h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden="true" />}
+                {(edoStatus === 'error' || edoStatus === 'partial') && (
+                  <AlertCircle className="mt-px h-3.5 w-3.5 shrink-0" style={{ color: 'var(--warn-icon)' }} aria-hidden="true" />
+                )}
+                <span>
+                  {edoStatus === 'loading' && t.edoLoading}
+                  {edoStatus === 'error' && t.edoUnavailable}
+                  {edoStatus === 'partial' && t.edoPartial}
+                  {edoStatus === 'ok' &&
+                    (edoTime ? (
+                      <>
+                        {t.edoAsOf}: <strong className="num">{edoTime}</strong>
+                        {droughtDate ? ` (${t.edoForDate})` : ` (${t.edoLatest})`}
+                      </>
+                    ) : (
+                      t.edoLatest
+                    ))}
+                </span>
+              </p>
               <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1" style={{ color: 'var(--ink-secondary)' }}>
                 <span className="inline-flex items-center gap-1.5">
                   <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: '#eab308' }} />
@@ -797,6 +912,42 @@ export function ParcelMap({
                   {t.edoLegendAlert}
                 </span>
               </div>
+              {edoStatus === 'error' && (
+                <button
+                  type="button"
+                  className="chip mt-1.5"
+                  onClick={() => {
+                    setEdoTiles({ loading: true, loaded: 0, failed: 0 });
+                    setEdoAttempt((n) => n + 1);
+                  }}
+                >
+                  <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+                  {t.retryButton}
+                </button>
+              )}
+              {edoStatus !== 'error' && (
+                <p className="mt-1.5 leading-snug" style={{ color: 'var(--ink-muted)' }}>
+                  {t.edoNoColour}
+                </p>
+              )}
+              {edoStatus !== 'error' && zoom >= EDO_COARSE_ZOOM && (
+                <div className="mt-2 rounded-lg px-2.5 py-2" style={{ backgroundColor: 'var(--bg-hover)' }}>
+                  <p className="leading-snug" style={{ color: 'var(--ink-secondary)' }}>
+                    {t.edoCoarse}
+                  </p>
+                  <button
+                    type="button"
+                    className="chip mt-1.5"
+                    onClick={() => {
+                      const map = mapRef.current;
+                      if (map) map.flyTo(map.getCenter(), EDO_COARSE_ZOOM - 2, { duration: 0.8 });
+                    }}
+                  >
+                    <ZoomOut className="h-3.5 w-3.5" aria-hidden="true" />
+                    {t.edoZoomOut}
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

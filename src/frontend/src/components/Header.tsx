@@ -1,25 +1,22 @@
 import { Link } from 'react-router-dom';
-import { Contrast, Type } from 'lucide-react';
+import { Moon, Sun } from 'lucide-react';
 import type { Language, TranslationDict } from '../i18n/translations';
 
 interface HeaderProps {
   t: TranslationDict;
   lang: Language;
   onChangeLang: (lang: Language) => void;
-  largeText: boolean;
-  onToggleLargeText: () => void;
-  highContrast: boolean;
-  onToggleHighContrast: () => void;
+  /** "Kontrast": dark theme with high-contrast text */
+  darkMode: boolean;
+  onToggleDarkMode: () => void;
 }
 
 export function Header({
   t,
   lang,
   onChangeLang,
-  largeText,
-  onToggleLargeText,
-  highContrast,
-  onToggleHighContrast,
+  darkMode,
+  onToggleDarkMode,
 }: HeaderProps) {
   return (
     <header
@@ -80,31 +77,17 @@ export function Header({
         <nav aria-label="Dostępność i język" className="flex items-center gap-1 sm:gap-2">
           <button
             type="button"
-            onClick={onToggleLargeText}
-            aria-pressed={largeText}
+            onClick={onToggleDarkMode}
+            aria-pressed={darkMode}
+            title={darkMode ? t.themeLightTitle : t.themeDarkTitle}
             className="btn-ghost inline-flex min-h-[38px] items-center gap-1.5 rounded-md px-2.5 text-sm font-medium"
-            style={
-              largeText
-                ? { backgroundColor: 'var(--bg-field)', color: 'var(--ink-primary)', fontWeight: 600 }
-                : undefined
-            }
+            style={darkMode ? { backgroundColor: 'var(--bg-hover)', color: 'var(--ink-primary)', fontWeight: 600 } : undefined}
           >
-            <Type className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
-            <span className="hidden sm:inline">{t.a11yLargerText}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={onToggleHighContrast}
-            aria-pressed={highContrast}
-            className="btn-ghost inline-flex min-h-[38px] items-center gap-1.5 rounded-md px-2.5 text-sm font-medium"
-            style={
-              highContrast
-                ? { backgroundColor: 'var(--ink-primary)', color: 'var(--bg-surface)', fontWeight: 600 }
-                : undefined
-            }
-          >
-            <Contrast className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+            {darkMode ? (
+              <Sun className="h-4 w-4 shrink-0" strokeWidth={1.9} aria-hidden="true" />
+            ) : (
+              <Moon className="h-4 w-4 shrink-0" strokeWidth={1.9} aria-hidden="true" />
+            )}
             <span className="hidden sm:inline">{t.a11yHighContrast}</span>
           </button>
 

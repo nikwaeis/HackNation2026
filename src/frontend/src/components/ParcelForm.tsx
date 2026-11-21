@@ -144,7 +144,7 @@ function TerritoryNote({
 
   if (v.kind === 'field') {
     return (
-      <span className="tag mt-2 !whitespace-normal" style={{ backgroundColor: '#d1fae5', color: 'var(--emerald-ink)' }}>
+      <span className="tag mt-2 !whitespace-normal" style={{ backgroundColor: 'var(--emerald-tint)', color: 'var(--emerald-ink)' }}>
         <Wheat className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
         <span>
           {t.fieldKinds[v.field]}
@@ -164,12 +164,12 @@ function TerritoryNote({
   }
 
   return (
-    <div role="alert" className="rise-in mt-3 rounded-xl px-3.5 py-3" style={{ backgroundColor: '#fffbeb', border: '1.5px solid #f59e0b' }}>
-      <p className="flex items-start gap-2 text-sm font-semibold leading-snug" style={{ color: '#78350f' }}>
-        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" style={{ color: '#d97706' }} strokeWidth={2.25} aria-hidden="true" />
+    <div role="alert" className="rise-in mt-3 rounded-xl px-3.5 py-3" style={{ backgroundColor: 'var(--warn-bg)', border: '1.5px solid var(--warn-border)' }}>
+      <p className="flex items-start gap-2 text-sm font-semibold leading-snug" style={{ color: 'var(--warn-ink)' }}>
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" style={{ color: 'var(--warn-icon)' }} strokeWidth={2.25} aria-hidden="true" />
         {t.territoryWarnTitle}
       </p>
-      <p className="mt-1 pl-6 text-xs leading-relaxed" style={{ color: '#92400e' }}>
+      <p className="mt-1 pl-6 text-xs leading-relaxed" style={{ color: 'var(--warn-ink-2)' }}>
         {t.territoryReasons[v.reason]}
         {v.code && (
           <>
@@ -180,7 +180,7 @@ function TerritoryNote({
         ({sourceLabel(v.source)})
       </p>
       <div className="mt-2.5 flex flex-wrap gap-2 pl-6">
-        <button type="button" onClick={onPickOther} className="chip" style={{ borderColor: '#f59e0b', color: '#78350f' }}>
+        <button type="button" onClick={onPickOther} className="chip" style={{ borderColor: 'var(--warn-border)', color: 'var(--warn-ink)' }}>
           <X className="h-3.5 w-3.5" strokeWidth={2.25} aria-hidden="true" />
           {t.territoryPickOther}
         </button>
@@ -268,7 +268,7 @@ export function ParcelForm({
               border: `1.5px solid ${
                 pointLookup?.status === 'found'
                   ? needsTerritoryConfirmation(lookup)
-                    ? '#f59e0b'
+                    ? 'var(--warn-border)'
                     : 'var(--emerald)'
                   : 'var(--hairline)'
               }`,
@@ -279,7 +279,7 @@ export function ParcelForm({
                 {pointLookup?.status === 'loading' ? (
                   <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" style={{ color: 'var(--water-accent)' }} aria-hidden="true" />
                 ) : pointLookup?.status === 'found' && needsTerritoryConfirmation(lookup) ? (
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" style={{ color: '#d97706' }} strokeWidth={2.25} aria-hidden="true" />
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" style={{ color: 'var(--warn-icon)' }} strokeWidth={2.25} aria-hidden="true" />
                 ) : pointLookup?.status === 'found' ? (
                   <Check className="mt-0.5 h-4 w-4 shrink-0" style={{ color: 'var(--emerald)' }} strokeWidth={2.75} aria-hidden="true" />
                 ) : (
@@ -355,7 +355,7 @@ export function ParcelForm({
                   className="absolute right-3 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full"
                   style={{ backgroundColor: 'var(--emerald)' }}
                 >
-                  <Check className="h-3 w-3 text-white" strokeWidth={3} />
+                  <Check className="h-3 w-3" style={{ color: 'var(--emerald-on)' }} strokeWidth={3} />
                 </span>
               )}
             </div>
@@ -423,7 +423,7 @@ export function ParcelForm({
                       className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full"
                       style={{ backgroundColor: 'var(--emerald)' }}
                     >
-                      <Check className="h-3 w-3 text-white" strokeWidth={3.25} />
+                      <Check className="h-3 w-3" style={{ color: 'var(--emerald-on)' }} strokeWidth={3.25} />
                     </span>
                   )}
                 </span>
@@ -498,8 +498,11 @@ export function ParcelForm({
         >
           {submitting ? (
             <span className="relative flex h-4 w-4 shrink-0" aria-hidden="true">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white/70" />
-              <span className="relative inline-flex h-4 w-4 rounded-full bg-white" />
+              <span
+                className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-70"
+                style={{ backgroundColor: 'var(--brand-on-primary)' }}
+              />
+              <span className="relative inline-flex h-4 w-4 rounded-full" style={{ backgroundColor: 'var(--brand-on-primary)' }} />
             </span>
           ) : (
             <Search className="h-[18px] w-[18px] shrink-0" strokeWidth={2.4} aria-hidden="true" />

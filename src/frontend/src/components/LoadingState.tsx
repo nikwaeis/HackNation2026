@@ -70,7 +70,7 @@ export function LoadingState({ t, variant = 'page' }: LoadingStateProps) {
                 className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${current ? 'animate-pulse' : ''}`}
                 style={{
                   backgroundColor: done ? 'var(--brand-primary)' : current ? 'var(--brand-soft)' : 'var(--bg-hover)',
-                  color: done ? '#ffffff' : current ? 'var(--brand-primary)' : 'var(--ink-muted)',
+                  color: done ? 'var(--brand-on-primary)' : current ? 'var(--brand-primary)' : 'var(--ink-muted)',
                 }}
               >
                 {done ? <Check className="h-3.5 w-3.5" strokeWidth={3} aria-hidden="true" /> : idx + 1}

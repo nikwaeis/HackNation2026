@@ -314,6 +314,7 @@ export function ReportView({ t, lang, report, isDemo = false, onBack }: ReportVi
           }}
           slopeDeg={metrics.slopeDeg}
           defaultBaseLayer="orto"
+          droughtDate={parcelInfo.targetDate}
           defaultShowParcels
           showViewportWater
           overlayOffsetClass="lg:left-[556px] xl:left-[616px]"
@@ -371,7 +372,7 @@ export function ReportView({ t, lang, report, isDemo = false, onBack }: ReportVi
               {parcelInfo.dzialkaId}
             </h1>
             <div className="mt-3 flex flex-wrap gap-1.5">
-              <span className="tag" style={{ backgroundColor: 'var(--emerald-soft)', border: '1px solid #a7f3d0' }}>
+              <span className="tag" style={{ backgroundColor: 'var(--emerald-soft)', border: '1px solid var(--emerald-border)' }}>
                 <Wheat className="h-3.5 w-3.5" style={{ color: 'var(--emerald)' }} aria-hidden="true" />
                 {cropDisplay}
               </span>
@@ -683,7 +684,7 @@ export function ReportView({ t, lang, report, isDemo = false, onBack }: ReportVi
                   className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
                   style={{
                     backgroundColor: step3_irrigation.isRecommended ? 'var(--water-accent)' : 'var(--brand-soft)',
-                    color: step3_irrigation.isRecommended ? '#ffffff' : 'var(--brand-primary)',
+                    color: step3_irrigation.isRecommended ? 'var(--water-on)' : 'var(--brand-primary)',
                   }}
                 >
                   {step3_irrigation.isRecommended ? <Droplets className="h-5 w-5" strokeWidth={2} /> : <ShieldCheck className="h-5 w-5" strokeWidth={2} />}
