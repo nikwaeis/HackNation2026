@@ -1,32 +1,30 @@
 import { Link } from 'react-router-dom';
-import { Contrast, Type } from 'lucide-react';
+import { Moon, Sun } from 'lucide-react';
 import type { Language, TranslationDict } from '../i18n/translations';
 
 interface HeaderProps {
   t: TranslationDict;
   lang: Language;
   onChangeLang: (lang: Language) => void;
-  largeText: boolean;
-  onToggleLargeText: () => void;
-  highContrast: boolean;
-  onToggleHighContrast: () => void;
+  /** "Kontrast": dark theme with high-contrast text */
+  darkMode: boolean;
+  onToggleDarkMode: () => void;
 }
 
 export function Header({
   t,
   lang,
   onChangeLang,
-  largeText,
-  onToggleLargeText,
-  highContrast,
-  onToggleHighContrast,
+  darkMode,
+  onToggleDarkMode,
 }: HeaderProps) {
   return (
     <header
-      className="no-print sticky top-0 z-[1100]"
+      className="no-print sticky top-0 z-[1100] backdrop-blur-md"
       style={{
-        backgroundColor: 'var(--bg-surface)',
+        backgroundColor: 'var(--glass-bg)',
         borderBottom: '1px solid var(--hairline)',
+        boxShadow: '0 1px 0 rgba(255,255,255,0.6) inset, 0 6px 18px -14px rgba(15,23,42,0.35)',
       }}
     >
       <a
@@ -40,7 +38,7 @@ export function Header({
         {t.skipToContent}
       </a>
 
-      <div className="mx-auto flex h-16 max-w-[1440px] items-center justify-between gap-4 px-4 sm:px-6">
+      <div className="flex h-16 w-full items-center justify-between gap-4 px-4 sm:px-5">
         <Link
           to="/"
           className="flex items-center gap-2.5 py-1 no-underline"
@@ -67,7 +65,7 @@ export function Header({
             />
           </svg>
           <div className="flex items-baseline gap-2.5">
-            <span className="text-lg font-bold tracking-tight" style={{ color: 'var(--ink-primary)' }}>
+            <span className="text-lg font-extrabold tracking-tight" style={{ color: 'var(--brand-primary)' }}>
               {t.appName}
             </span>
             <span className="hidden text-sm sm:inline" style={{ color: 'var(--ink-muted)' }}>
@@ -79,31 +77,18 @@ export function Header({
         <nav aria-label="Dostępność i język" className="flex items-center gap-1 sm:gap-2">
           <button
             type="button"
-            onClick={onToggleLargeText}
-            aria-pressed={largeText}
+            onClick={onToggleDarkMode}
+            aria-pressed={darkMode}
+            aria-label={t.a11yHighContrast}
+            title={darkMode ? t.themeLightTitle : t.themeDarkTitle}
             className="btn-ghost inline-flex min-h-[38px] items-center gap-1.5 rounded-md px-2.5 text-sm font-medium"
-            style={
-              largeText
-                ? { backgroundColor: 'var(--bg-field)', color: 'var(--ink-primary)', fontWeight: 600 }
-                : undefined
-            }
+            style={darkMode ? { backgroundColor: 'var(--bg-hover)', color: 'var(--ink-primary)', fontWeight: 600 } : undefined}
           >
-            <Type className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
-            <span className="hidden sm:inline">{t.a11yLargerText}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={onToggleHighContrast}
-            aria-pressed={highContrast}
-            className="btn-ghost inline-flex min-h-[38px] items-center gap-1.5 rounded-md px-2.5 text-sm font-medium"
-            style={
-              highContrast
-                ? { backgroundColor: 'var(--ink-primary)', color: 'var(--bg-surface)', fontWeight: 600 }
-                : undefined
-            }
-          >
-            <Contrast className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+            {darkMode ? (
+              <Sun className="h-4 w-4 shrink-0" strokeWidth={1.9} aria-hidden="true" />
+            ) : (
+              <Moon className="h-4 w-4 shrink-0" strokeWidth={1.9} aria-hidden="true" />
+            )}
             <span className="hidden sm:inline">{t.a11yHighContrast}</span>
           </button>
 
