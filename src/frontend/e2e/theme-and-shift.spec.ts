@@ -46,8 +46,11 @@ async function colours(el: Locator) {
 
 async function expectDarkAndReadable(el: Locator, name: string, minContrast = 4.5) {
   await expect(el, name).toBeVisible();
+  // backgrounds fade in with a CSS transition after the theme switch: measure once it has settled
+  await expect
+    .poll(async () => (await colours(el)).bgLuminance, { message: `${name}: background should be dark` })
+    .toBeLessThan(0.1);
   const c = await colours(el);
-  expect(c.bgLuminance, `${name}: background should be dark`).toBeLessThan(0.1);
   expect(c.contrast, `${name}: text contrast`).toBeGreaterThanOrEqual(minContrast);
 }
 
