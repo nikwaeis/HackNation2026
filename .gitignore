@@ -71,3 +71,7 @@ secrets/
 # Misc
 ~$*
 *~
+
+# Frontend e2e (Playwright) output
+src/frontend/e2e-results/
+src/frontend/playwright-report/

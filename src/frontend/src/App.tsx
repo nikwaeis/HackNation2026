@@ -5,17 +5,32 @@ import { Header } from './components/Header';
 import { HomePage } from './pages/HomePage';
 import { ReportPage } from './pages/ReportPage';
 
+function readStorage(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeStorage(key: string, value: string) {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // private mode / blocked storage: the preference just isn't remembered
+  }
+}
+
 export function App() {
   const [lang, setLang] = useState<Language>(() => {
     const saved = window.localStorage.getItem('wodoplon-lang');
     return saved === 'en' ? 'en' : 'pl';
   });
-  const [largeText, setLargeText] = useState<boolean>(
-    () => window.localStorage.getItem('wodoplon-text-scale') === 'large',
-  );
-  const [highContrast, setHighContrast] = useState<boolean>(
-    () => window.localStorage.getItem('wodoplon-contrast') === 'high',
-  );
+  // "Kontrast" = dark theme with high contrast. Older versions stored 'wodoplon-contrast=high'.
+  const [darkMode, setDarkMode] = useState<boolean>(() => {
+    const saved = readStorage('wodoplon-theme');
+    return saved ? saved === 'dark' : readStorage('wodoplon-contrast') === 'high';
+  });
 
   useEffect(() => {
     document.documentElement.lang = lang;
@@ -23,14 +38,12 @@ export function App() {
   }, [lang]);
 
   useEffect(() => {
-    document.documentElement.dataset.textScale = largeText ? 'large' : 'normal';
-    window.localStorage.setItem('wodoplon-text-scale', largeText ? 'large' : 'normal');
-  }, [largeText]);
-
-  useEffect(() => {
-    document.documentElement.dataset.contrast = highContrast ? 'high' : 'normal';
-    window.localStorage.setItem('wodoplon-contrast', highContrast ? 'high' : 'normal');
-  }, [highContrast]);
+    const root = document.documentElement;
+    root.dataset.theme = darkMode ? 'dark' : 'light';
+    // native controls (date picker, scrollbars) follow the theme
+    root.style.colorScheme = darkMode ? 'dark' : 'light';
+    writeStorage('wodoplon-theme', darkMode ? 'dark' : 'light');
+  }, [darkMode]);
 
   const t = translations[lang];
 
@@ -41,10 +54,8 @@ export function App() {
           t={t}
           lang={lang}
           onChangeLang={setLang}
-          largeText={largeText}
-          onToggleLargeText={() => setLargeText((v) => !v)}
-          highContrast={highContrast}
-          onToggleHighContrast={() => setHighContrast((v) => !v)}
+          darkMode={darkMode}
+          onToggleDarkMode={() => setDarkMode((v) => !v)}
         />
         <div className="flex-1">
           <Routes>
