@@ -1,4 +1,9 @@
-# WodoPlon
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.svg">
+    <img src="docs/assets/logo.svg" alt="WodoPlon" width="300">
+  </picture>
+</h1>
 
 WodoPlon is a web app that helps Polish farmers understand the water situation on a specific field and decide what
 to do about it. You pick a parcel, a crop and a date. The app pulls open weather, satellite, soil, terrain and
@@ -9,6 +14,21 @@ recommendation comes from a deterministic engine built on the FAO-56 crop water 
 
 The project started at HackNation 2026 for the KOWR challenge "Zatrzymaj wodę, chroń plony" (keep the water, protect
 the crops).
+
+## Demo
+
+[![WodoPlon promo video on YouTube](https://img.youtube.com/vi/_8m3ALKiHTU/maxresdefault.jpg)](https://youtu.be/_8m3ALKiHTU)
+
+A short promo video is on [YouTube](https://youtu.be/_8m3ALKiHTU) and the slides from the hackathon pitch are in
+[docs/presentation-pl.pdf](docs/presentation-pl.pdf). Both are in Polish.
+
+| Selecting a parcel on the orthophoto | Copernicus EDO drought layer |
+|---|---|
+| ![Parcel form and orthophoto map with the selected parcel outlined](docs/assets/screenshots/parcel-selection.jpg) | ![Drought layer and legend over the orthophoto map](docs/assets/screenshots/drought-layer.jpg) |
+
+| Report: water situation | Report: irrigation and data sources |
+|---|---|
+| ![Report header with risk level, water balance, rainfall and drought history](docs/assets/screenshots/report-assessment.jpg) | ![Irrigation recommendation with dose and the list of data sources and limitations](docs/assets/screenshots/report-irrigation-sources.jpg) |
 
 ## Contents
 
@@ -279,6 +299,7 @@ Indices: `NDVI = (B08 − B04) / (B08 + B04)`, `NDWI = (B08 − B11) / (B08 + B1
 - [docs/api_asp_net_core_python_fastapi.md](docs/api_asp_net_core_python_fastapi.md): contracts between the frontend, API and geo-worker
 - [docs/data.md](docs/data.md): database schema and caching strategy
 - [docs/plan/00-overview.md](docs/plan/00-overview.md): implementation plan
+- [docs/presentation-pl.pdf](docs/presentation-pl.pdf): pitch slides (Polish)
 
 ## License
 
