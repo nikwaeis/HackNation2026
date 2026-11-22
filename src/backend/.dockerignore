@@ -1,0 +1,6 @@
+# host build output must not overwrite the restore done inside the image (NETSDK1064)
+**/bin/
+**/obj/
+.idea/
+*.user
+*.DotSettings.user
