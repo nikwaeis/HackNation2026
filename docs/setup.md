@@ -116,24 +116,27 @@ mkdir secrets
 #   secrets/redis_connection  redis:6379,password=<password>
 ```
 
+Always pass `--env-file .env.prod`: without it Compose reads the ports (`API_PORT`, `FRONTEND_PORT`) from the
+development `.env` file or falls back to the defaults, because `env_file:` in the compose file only reaches the containers.
+
 Migrations are applied automatically **only in Development**. In production, apply them before the first start:
 
 ```bash
 # 1. Start the database alone
-docker compose -f docker-compose.prod.yml up -d postgres
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d postgres
 
 # 2. Generate an idempotent SQL script (needs the .NET SDK and `dotnet tool install --global dotnet-ef`)
 dotnet ef migrations script --idempotent --project src/backend/WodoPlon.Api -o migrate.sql
 
 # 3. Apply it (safe to re-run after every update: applied migrations are skipped)
-docker compose -f docker-compose.prod.yml exec -T postgres \
+docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T postgres \
   sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1' < migrate.sql
 
 # 4. Warm up the water network (once, then monthly)
-docker compose -f docker-compose.prod.yml run --rm osm-import
+docker compose --env-file .env.prod -f docker-compose.prod.yml run --rm osm-import
 
 # 5. Seed crops on the first start: add Database__RunSeed=true to .env.prod, then start everything
-docker compose -f docker-compose.prod.yml up -d --build
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
 ```
 
 The frontend is served by nginx on port `80` and proxies `/api` to the backend. The Geo-Worker is internal only.
@@ -141,7 +144,7 @@ The API trusts `X-Forwarded-For` only from loopback and private networks (Docker
 cloud load balancer with a public address), list every trusted network in `.env.prod` — the list replaces the default:
 `ForwardedHeaders__KnownNetworks__0=172.16.0.0/12`, `ForwardedHeaders__KnownNetworks__1=<proxy CIDR>`, …
 
-Monthly refresh (cron or by hand): `docker compose -f docker-compose.prod.yml run --rm osm-import`.
+Monthly refresh (cron or by hand): `docker compose --env-file .env.prod -f docker-compose.prod.yml run --rm osm-import`.
 
 ## 7. External services
 
@@ -160,6 +163,7 @@ Monthly refresh (cron or by hand): `docker compose -f docker-compose.prod.yml ru
 |---|---|
 | Report says water data is still loading | The OSM import was not run (section 3) and Overpass is overloaded. Run the import. |
 | `429 Too Many Requests` | API rate limit: 10 analyses/min per client, 30/min per IP. Wait for `Retry-After`. Invalid requests do not count. |
+| OSM import fails at step 1/4 (`404`, `502`, stalled download) | Geofabrik has not published the newest extract yet. The script then tries the extracts of the last 3 days; if all fail, run it again later or pass one explicitly: `run --rm -e PBF_URL=https://download.geofabrik.de/europe/poland/poland-YYMMDD.osm.pbf osm-import`. |
 | `500` with a weather message | Open-Meteo is down or the daily per-IP quota is used up (shared IPs at events). Try later or from another network. |
 | `slopeDeg` is `null` | GUGiK NMT did not answer in time; the next analysis of the parcel asks again. |
 | `satelliteStatus: ERROR` | Geo-Worker or Earth Search unavailable; check `docker compose logs python-service`. The next request (after ~1 min) retries. |

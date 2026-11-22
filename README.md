@@ -182,9 +182,9 @@ mkdir secrets
 #   secrets/db_connection     Host=postgres;Database=WodoPlon;Username=wodoplon;Password=<password>
 #   secrets/redis_password    <password>
 #   secrets/redis_connection  redis:6379,password=<password>
-docker compose -f docker-compose.prod.yml up -d --build
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
 # after migrations are applied (see docs/setup.md), once and monthly:
-docker compose -f docker-compose.prod.yml run --rm osm-import
+docker compose --env-file .env.prod -f docker-compose.prod.yml run --rm osm-import
 ```
 
 In production, nginx serves the frontend on port `80` (`FRONTEND_PORT`) and proxies `/api` to the backend and `/uldk`
