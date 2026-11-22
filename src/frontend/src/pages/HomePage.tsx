@@ -15,6 +15,7 @@ import { ParcelForm, needsTerritoryConfirmation, type ParcelLookup } from '../co
 import { assessTerritory } from '../api/territory';
 import type { FieldArea } from '../api/mapContext';
 import { labelPoint } from '../lib/geo';
+import { loadMapView, saveMapView } from '../lib/mapView';
 import { ParcelMap } from '../components/ParcelMap';
 import { LoadingState } from '../components/LoadingState';
 import { ErrorBanner } from '../components/ErrorBanner';
@@ -43,6 +44,8 @@ const START_VIEW: { center: [number, number]; zoom: number } = { center: [53.116
 
 export function HomePage({ t, lang }: HomePageProps) {
   const navigate = useNavigate();
+  // back from a report ("Nowe sprawdzenie") the map stays where the user left it
+  const [initialView] = useState(() => loadMapView() ?? START_VIEW);
 
   const today = useMemo(() => new Date(), []);
   const maxDate = useMemo(() => isoDate(today), [today]);
@@ -253,7 +256,8 @@ export function HomePage({ t, lang }: HomePageProps) {
           selectionOutline={lookup.parcel?.geometry ?? null}
           selectionLoading={lookup.status === 'loading'}
           parcelLabel={parcelLabel}
-          initialView={START_VIEW}
+          initialView={initialView}
+          onViewChange={saveMapView}
           onViewFieldsChange={(fields) => {
             viewFields.current = fields;
           }}

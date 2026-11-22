@@ -4,6 +4,8 @@ import { ApiError, fetchReport } from '../api/client';
 import { SAMPLE_DEMO_REPORT } from '../api/mockData';
 import type { AnalysisResponse } from '../types/api';
 import type { Language, TranslationDict } from '../i18n/translations';
+import { labelPoint } from '../lib/geo';
+import { loadMapView, saveMapView } from '../lib/mapView';
 import { ReportView } from '../components/ReportView';
 import { LoadingState } from '../components/LoadingState';
 import { ErrorBanner } from '../components/ErrorBanner';
@@ -92,7 +94,17 @@ export function ReportPage({ t, lang }: ReportPageProps) {
           lang={lang}
           report={report}
           isDemo={isDemoRoute}
-          onBack={() => navigate('/')}
+          onBack={() => {
+            // opened from a shared link: nothing remembered yet, so start the new check at this parcel
+            if (!loadMapView() && report.parcelInfo?.polygonGeoJson) {
+              try {
+                saveMapView({ center: labelPoint(report.parcelInfo.polygonGeoJson), zoom: 17 });
+              } catch {
+                // malformed geometry: the home page falls back to its default view
+              }
+            }
+            navigate('/');
+          }}
         />
       )}
     </main>

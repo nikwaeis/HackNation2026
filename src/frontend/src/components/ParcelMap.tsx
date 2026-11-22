@@ -172,6 +172,8 @@ interface ParcelMapProps {
   droughtDate?: string | null;
   /** Starting view (defaults to the whole of Poland) */
   initialView?: { center: [number, number]; zoom: number };
+  /** Called after every pan / zoom, e.g. to remember the view between pages */
+  onViewChange?: (view: { center: [number, number]; zoom: number }) => void;
   /** Show cadastral parcel boundaries from the start */
   defaultShowParcels?: boolean;
   /** Draw all ditches / streams in the visible area (not only around the parcel) */
@@ -186,11 +188,13 @@ function MapClickHandler({
   onSelect,
   onZoomChange,
   onNotice,
+  onViewChange,
 }: {
   enabled: boolean;
   onSelect?: (lat: number, lon: number) => void;
   onZoomChange: (zoom: number) => void;
   onNotice: (kind: 'zoomed') => void;
+  onViewChange?: (view: { center: [number, number]; zoom: number }) => void;
 }) {
   const map = useMap();
   useMapEvents({
@@ -209,6 +213,11 @@ function MapClickHandler({
     },
     zoomend(e) {
       onZoomChange(e.target.getZoom());
+    },
+    moveend(e) {
+      if (!onViewChange) return;
+      const center = e.target.getCenter();
+      onViewChange({ center: [center.lat, center.lng], zoom: e.target.getZoom() });
     },
   });
   return null;
@@ -422,6 +431,7 @@ export function ParcelMap({
   overlayOffsetClass = 'lg:left-[476px]',
   reserveTopRight = false,
   initialView,
+  onViewChange,
   droughtDate = null,
   onViewFieldsChange,
   selectionTone = 'ok',
@@ -814,6 +824,7 @@ export function ParcelMap({
           onSelect={onSelectPoint}
           onZoomChange={setZoom}
           onNotice={showNotice}
+          onViewChange={onViewChange}
         />
         <ViewportContext enabled={showViewportWater} onChange={handleViewContext} />
         <DevMapHandle interactive={interactive} />
