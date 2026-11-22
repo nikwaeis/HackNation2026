@@ -22,6 +22,9 @@
     <data name="Common.UnexpectedError" xml:space="preserve">
         <value>Wystąpił nieoczekiwany błąd.</value>
     </data>
+    <data name="Common.MalformedRequest" xml:space="preserve">
+        <value>Nieprawidłowe dane zapytania. Sprawdź format pól (np. data w formacie RRRR-MM-DD).</value>
+    </data>
     <data name="Vo.ParcelId.Empty" xml:space="preserve">
         <value>Identyfikator działki nie może być pusty.</value>
     </data>

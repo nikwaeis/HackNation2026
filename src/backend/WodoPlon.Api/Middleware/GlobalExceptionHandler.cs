@@ -1,15 +1,22 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.AspNetCore.Localization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Localization;
+using WodoPlon.Api.Common.Models;
+using WodoPlon.Api.Resources;
 
 namespace WodoPlon.Api.Middleware;
 
 public sealed class GlobalExceptionHandler : IExceptionHandler
 {
     private readonly ILogger<GlobalExceptionHandler> _logger;
+    private readonly IStringLocalizer<SharedResources> _localizer;
 
-    public GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger)
+    public GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger, IStringLocalizer<SharedResources> localizer)
     {
         _logger = logger;
+        _localizer = localizer;
     }
 
     public async ValueTask<bool> TryHandleAsync(
@@ -17,6 +24,18 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
         Exception exception,
         CancellationToken cancellationToken)
     {
+        // malformed client input (empty body, broken JSON, wrong date format): a client error, not a server failure
+        if (exception is BadHttpRequestException badRequest)
+        {
+            _logger.LogWarning("Malformed request to {Path}: {Message}", httpContext.Request.Path, exception.Message);
+            // UseExceptionHandler runs outside UseRequestLocalization: the culture it set does not flow back here
+            if (httpContext.Features.Get<IRequestCultureFeature>() is { } requestCulture)
+                CultureInfo.CurrentUICulture = requestCulture.RequestCulture.UICulture;
+            await WriteProblemAsync(httpContext, badRequest.StatusCode, "Bad Request",
+                _localizer[CommonErrorCodes.MalformedRequest].Value, cancellationToken);
+            return true;
+        }
+
         _logger.LogError(
             exception,
             "Unhandled exception occurred: {Message}",
@@ -25,8 +44,6 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
 
         var (statusCode, title) = exception switch
         {
-            BadHttpRequestException =>
-                (StatusCodes.Status400BadRequest, "Bad Request"),
             UnauthorizedAccessException =>
                 (StatusCodes.Status401Unauthorized, "Unauthorized"),
             KeyNotFoundException =>
@@ -35,13 +52,23 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
                 (StatusCodes.Status500InternalServerError, "Internal Server Error")
         };
 
+        await WriteProblemAsync(httpContext, statusCode, title,
+            statusCode == StatusCodes.Status500InternalServerError
+                ? "An unexpected error occurred. Please try again later."
+                : exception.Message,
+            cancellationToken);
+
+        return true;
+    }
+
+    private static Task WriteProblemAsync(HttpContext httpContext, int statusCode, string title, string detail,
+        CancellationToken cancellationToken)
+    {
         var problemDetails = new ProblemDetails
         {
             Status = statusCode,
             Title = title,
-            Detail = statusCode == StatusCodes.Status500InternalServerError
-                ? "An unexpected error occurred. Please try again later."
-                : exception.Message,
+            Detail = detail,
             Instance = httpContext.Request.Path
         };
 
@@ -49,10 +76,7 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
 
         httpContext.Response.StatusCode = statusCode;
 
-        await httpContext.Response.WriteAsJsonAsync(
-            problemDetails,
-            cancellationToken);
-
-        return true;
+        return httpContext.Response.WriteAsJsonAsync(problemDetails, (System.Text.Json.JsonSerializerOptions?)null,
+            "application/problem+json", cancellationToken);
     }
 }
