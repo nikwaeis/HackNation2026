@@ -15,10 +15,21 @@ PG="PG:host=${PGHOST} dbname=${PGDATABASE} user=${PGUSER} password=${PGPASSWORD}
 sql() { ogrinfo -q "$PG" -sql "$1" > /dev/null; }
 
 echo "1/4 download (only if Geofabrik has a newer file)"
+# abort a stalled transfer instead of waiting forever
+fetch() { curl -fsSL -R --connect-timeout 30 --speed-limit 1024 --speed-time 60 -o "$PBF.part" "$@"; }
 if [ -f "$PBF" ]; then
-  curl -fsSL -R -z "$PBF" -o "$PBF.part" "$PBF_URL" && [ -s "$PBF.part" ] && mv "$PBF.part" "$PBF" || rm -f "$PBF.part"
+  fetch -z "$PBF" "$PBF_URL" && [ -s "$PBF.part" ] && mv "$PBF.part" "$PBF" || rm -f "$PBF.part"
 else
-  curl -fsSL -R -o "$PBF.part" "$PBF_URL" && mv "$PBF.part" "$PBF"
+  # "latest" redirects to the newest dated file, which can hang or answer 404/502 until Geofabrik publishes it:
+  # then take one of the previous days' extracts
+  if ! fetch "$PBF_URL"; then
+    for days in 1 2 3; do
+      url="https://download.geofabrik.de/europe/poland/poland-$(date -u -d "$days days ago" +%y%m%d).osm.pbf"
+      echo "    download failed, trying $url"
+      fetch "$url" && break
+    done
+  fi
+  [ -s "$PBF.part" ] && mv "$PBF.part" "$PBF"
 fi
 SOURCE_DATE="$(date -u -r "$PBF" +%F)"
 echo "    extract date: $SOURCE_DATE"
