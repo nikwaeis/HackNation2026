@@ -13,6 +13,8 @@ public sealed class ExternalApisSettings
     /// <summary> Tried in order when the main Overpass instance fails (it is often overloaded) </summary>
     public string[] OverpassMirrorUrls { get; set; } = ["https://overpass.private.coffee/", "https://overpass.kumi.systems/"];
     public int TimeoutSeconds { get; set; } = 8;
+    /// <summary> The 10-year daily archive query takes 6–9 s, too close to the default 8 s </summary>
+    public int OpenMeteoTimeoutSeconds { get; set; } = 20;
     /// <summary> Overpass runs in the background (HydroBackgroundService), so it may take long </summary>
     public int OverpassTimeoutSeconds { get; set; } = 30;
 }
@@ -30,6 +32,8 @@ public sealed class ExternalApisSettingsValidation : AbstractValidator<ExternalA
 
         RuleFor(x => x.TimeoutSeconds)
             .GreaterThan(0).WithMessage("External APIs TimeoutSeconds must be positive.");
+        RuleFor(x => x.OpenMeteoTimeoutSeconds)
+            .GreaterThan(0).WithMessage("Open-Meteo TimeoutSeconds must be positive.");
         RuleFor(x => x.OverpassTimeoutSeconds)
             .GreaterThan(5).WithMessage("Overpass timeout must be above 5 seconds (server-side query budget is 5 s less).");
     }

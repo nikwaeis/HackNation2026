@@ -6,7 +6,7 @@ Every client follows the same layout:
 - the implementation in `Common/Services/`;
 - registration in `Extensions/ExternalApiExtension.cs`.
 
-URLs and the timeout (8 s) come from the `ExternalApis` section (`ExternalApisSettings`). The Python worker timeout is 18 s.
+URLs and the timeout (8 s; Open-Meteo 20 s, Overpass 30 s) come from the `ExternalApis` section (`ExternalApisSettings`). The Python worker timeout is 18 s.
 
 | Client | Request | Response | On failure |
 |---|---|---|---|

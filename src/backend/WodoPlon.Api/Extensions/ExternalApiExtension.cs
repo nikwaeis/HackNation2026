@@ -13,7 +13,7 @@ public static class ExternalApiExtension
     public static IServiceCollection AddExternalApiClients(this IServiceCollection services)
     {
         services.AddExternalClient<IUldkClient, UldkClient>(s => s.UldkBaseUrl);
-        services.AddExternalClient<IOpenMeteoClient, OpenMeteoClient>(s => s.OpenMeteoBaseUrl);
+        services.AddExternalClient<IOpenMeteoClient, OpenMeteoClient>(s => s.OpenMeteoBaseUrl, s => s.OpenMeteoTimeoutSeconds);
         services.AddExternalClient<ISoilGridsClient, SoilGridsClient>(s => s.SoilGridsBaseUrl);
         services.AddExternalClient<IOverpassClient, OverpassClient>(s => s.OverpassBaseUrl, s => s.OverpassTimeoutSeconds);
 
