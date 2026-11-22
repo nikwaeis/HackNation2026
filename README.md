@@ -22,13 +22,15 @@ the crops).
 A short promo video is on [YouTube](https://youtu.be/_8m3ALKiHTU) and the slides from the hackathon pitch are in
 [docs/presentation-pl.pdf](docs/presentation-pl.pdf). Both are in Polish.
 
+The screenshots below show the English interface (the app opens in Polish, with a PL/EN switch in the header).
+
 | Selecting a parcel on the orthophoto | Copernicus EDO drought layer |
 |---|---|
-| ![Parcel form and orthophoto map with the selected parcel outlined](docs/assets/screenshots/parcel-selection.jpg) | ![Drought layer and legend over the orthophoto map](docs/assets/screenshots/drought-layer.jpg) |
+| ![Parcel form with a parcel found by its ID, outlined on the orthophoto with cadastral boundaries](docs/assets/screenshots/parcel-selection.jpg) | ![Drought warning areas over Poland on the street map, with the drought legend](docs/assets/screenshots/drought-layer.jpg) |
 
 | Report: water situation | Report: irrigation and data sources |
 |---|---|
-| ![Report header with risk level, water balance, rainfall and drought history](docs/assets/screenshots/report-assessment.jpg) | ![Irrigation recommendation with dose and the list of data sources and limitations](docs/assets/screenshots/report-irrigation-sources.jpg) |
+| ![Report header with the risk level, water balance against the 10-year median and rainfall](docs/assets/screenshots/report-assessment.jpg) | ![Retention measures, the irrigation step and the start of the sources and limitations section](docs/assets/screenshots/report-irrigation-sources.jpg) |
 
 ## Contents
 
