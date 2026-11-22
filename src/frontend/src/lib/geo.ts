@@ -203,3 +203,25 @@ export function nearestBetween(geometry: ParcelGeometry, line: LatLon[], proj: L
   const found = best as { d: number; parcel: Xy; water: Xy };
   return { distM: found.d, parcelPoint: proj.toLatLon(found.parcel), linePoint: proj.toLatLon(found.water) };
 }
+
+/** Every ring of a (Multi)Polygon (outer rings and holes) with its vertices projected to pixels */
+export function projectRings(geometry: ParcelGeometry, project: (lat: number, lon: number) => Xy): Xy[][] {
+  const polygons = geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates;
+  return polygons.flat().map((ring) => ring.map(([lon, lat]) => project(lat, lon)));
+}
+
+/** CSS `clip-path: path(...)` value from projected rings; holes use the even-odd rule */
+export function clipPathFromRings(rings: Xy[][]): string {
+  const d = rings
+    .map((ring) => 'M' + ring.map((p) => `${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join('L') + 'Z')
+    .join('');
+  return `path(evenodd, '${d}')`;
+}
+
+/**
+ * CSS `clip-path: path(...)` value outlining a (Multi)Polygon, with every vertex projected to element pixels
+ * (e.g. Leaflet layer points).
+ */
+export function cssClipPath(geometry: ParcelGeometry, project: (lat: number, lon: number) => Xy): string {
+  return clipPathFromRings(projectRings(geometry, project));
+}

@@ -49,9 +49,35 @@ import {
   type ViewContext,
   type WaterContext,
 } from '../api/mapContext';
-import { LocalProjection, bboxOf, interiorGrid, labelPoint, type LatLon } from '../lib/geo';
+import {
+  LocalProjection,
+  bboxOf,
+  clipPathFromRings,
+  interiorGrid,
+  labelPoint,
+  projectRings,
+  type LatLon,
+} from '../lib/geo';
+import { POLAND_BORDER } from '../lib/polandBorder';
 
 export const POLAND_CENTER: [number, number] = [52.06, 18.6];
+
+/**
+ * Layers that only cover Poland get their own panes, clipped to the Polish border: the Geoportal orthophoto
+ * is black outside its coverage, and EDO drought warnings for Germany or Ukraine are noise next to a Polish
+ * parcel. The orthophoto pane sits just under the tile pane (parcel boundaries stay on top of the photo).
+ */
+const ORTO_PANE = 'ortoPane';
+const DROUGHT_PANE = 'droughtPane';
+/**
+ * The border is ~1 km accurate (Natural Earth): fine for the ~5 km drought grid at any zoom, but at field zoom
+ * it would visibly trim real photo along the border, so the photo is clipped only at country / region zooms.
+ */
+const ORTO_CLIP_MAX_ZOOM = 9;
+const CLIPPED_PANES = [
+  { name: ORTO_PANE, maxZoom: ORTO_CLIP_MAX_ZOOM },
+  { name: DROUGHT_PANE, maxZoom: Infinity },
+];
 export const POLAND_ZOOM = 6;
 
 /**
@@ -256,6 +282,101 @@ function FitPolygonBounds({
     // extraPoint is compared by value via its coordinates
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [map, polygon, padLeft, extraPoint?.[0], extraPoint?.[1]]);
+
+  return null;
+}
+
+/** Leaflet internals used to follow the zoom animation (stable across Leaflet 1.x) */
+type ZoomingMap = L.Map & {
+  _animatingZoom?: boolean;
+  _latLngToNewLayerPoint(latlng: L.LatLngExpression, zoom: number, center: L.LatLngExpression): L.Point;
+};
+
+/** Leaflet's zoom animation: `transition: transform 0.25s cubic-bezier(0,0,0.25,1)` on the tile levels */
+const ZOOM_ANIM_MS = 250;
+
+/** CSS cubic-bezier(0, 0, 0.25, 1) at time t (0..1) */
+function zoomEasing(t: number): number {
+  // x(s) = 0.75 s² + 0.25 s³ is monotonic on [0, 1]: find s by bisection, then y(s) = 3 s² − 2 s³
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 24; i++) {
+    const s = (lo + hi) / 2;
+    if (0.75 * s * s + 0.25 * s * s * s < t) lo = s;
+    else hi = s;
+  }
+  const s = (lo + hi) / 2;
+  return 3 * s * s - 2 * s * s * s;
+}
+
+/**
+ * Clips CLIPPED_PANES to the Polish border. Panes are positioned in layer points, so the clip path is the
+ * border projected to layer points: it is stable while panning and recomputed whenever the zoom changes.
+ * During an animated zoom Leaflet scales the old tiles towards their final position with a CSS transition;
+ * the clip path follows them frame by frame with the same easing. (A CSS transition on clip-path itself is
+ * composited by Chrome and the panes showed unclipped while it ran.)
+ */
+function PolandClip() {
+  const map = useMap() as ZoomingMap;
+
+  useEffect(() => {
+    let frame = 0;
+    const border = (project: (lat: number, lon: number) => L.Point) => projectRings(POLAND_BORDER, project);
+    const current = () => border((lat, lon) => map.latLngToLayerPoint([lat, lon]));
+
+    function apply(zoom: number, rings: { x: number; y: number }[][], animating: boolean) {
+      let clip: string | null = null;
+      for (const { name, maxZoom } of CLIPPED_PANES) {
+        const el = map.getPane(name);
+        if (!el) continue;
+        // zooming past the limit keeps the clip until the animation ends; zoomend then drops it
+        const clipped = zoom <= maxZoom || (animating && el.style.clipPath !== '');
+        clip ??= clipped ? clipPathFromRings(rings) : null;
+        el.style.clipPath = clipped && clip ? clip : '';
+      }
+    }
+
+    function update() {
+      cancelAnimationFrame(frame);
+      apply(map.getZoom(), current(), false);
+    }
+
+    // pinch zoom and flyTo fire `zoom` on every frame; an animated zoom fires it once, at the end
+    const onZoom = () => {
+      if (!map._animatingZoom) update();
+    };
+
+    function onZoomAnim(e: L.ZoomAnimEvent) {
+      cancelAnimationFrame(frame);
+      const from = current();
+      const to = border((lat, lon) => map._latLngToNewLayerPoint([lat, lon], e.zoom, e.center));
+      const start = performance.now();
+      const step = (now: number) => {
+        const k = zoomEasing(Math.min(1, (now - start) / ZOOM_ANIM_MS));
+        const rings = from.map((ring, r) =>
+          ring.map((p, i) => ({ x: p.x + (to[r][i].x - p.x) * k, y: p.y + (to[r][i].y - p.y) * k })),
+        );
+        apply(e.zoom, rings, true);
+        if (k < 1) frame = requestAnimationFrame(step);
+      };
+      step(start);
+    }
+
+    update();
+    map.on('zoom', onZoom);
+    map.on('zoomanim', onZoomAnim);
+    map.on('zoomend viewreset', update);
+    return () => {
+      cancelAnimationFrame(frame);
+      map.off('zoom', onZoom);
+      map.off('zoomanim', onZoomAnim);
+      map.off('zoomend viewreset', update);
+      for (const { name } of CLIPPED_PANES) {
+        const el = map.getPane(name);
+        if (el) el.style.clipPath = '';
+      }
+    };
+  }, [map]);
 
   return null;
 }
@@ -471,6 +592,19 @@ export function ParcelMap({
 
   const edoReady = edoLatest !== undefined;
   const edoTime = edoReady ? edoTimeFor(droughtDate, edoLatest) : null;
+  // react-leaflet compares WMS params by reference and calls setParams (a full redraw) when they differ.
+  // An inline object changed on every render, and every tileload re-renders: the layer redrew hundreds of
+  // times a second and its tiles never faded in. Keep both objects stable.
+  const edoParams = useMemo(() => ({ layers: EDO_LAYER, ...(edoTime ? { TIME: edoTime } : {}) }), [edoTime]);
+  const edoEvents = useMemo(
+    () => ({
+      loading: () => setEdoTiles({ loading: true, loaded: 0, failed: 0 }),
+      load: () => setEdoTiles((s) => ({ ...s, loading: false })),
+      tileload: () => setEdoTiles((s) => ({ ...s, loaded: s.loaded + 1 })),
+      tileerror: () => setEdoTiles((s) => ({ ...s, failed: s.failed + 1 })),
+    }),
+    [],
+  );
   const edoStatus: 'loading' | 'error' | 'partial' | 'ok' = !edoReady
     ? 'loading'
     : edoTiles.failed > 0 && edoTiles.loaded === 0
@@ -636,22 +770,26 @@ export function ParcelMap({
       >
         <ZoomControl position="topright" />
 
-        {baseLayer === 'osm' ? (
+        {baseLayer === 'osm' && (
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             maxZoom={19}
           />
-        ) : (
-          <WMSTileLayer
-            url="https://mapy.geoportal.gov.pl/wss/service/PZGIK/ORTO/WMS/StandardResolution"
-            layers="Raster"
-            format="image/jpeg"
-            transparent={false}
-            maxZoom={19}
-            attribution="Geoportal.gov.pl (GUGiK)"
-          />
         )}
+        {/* the panes always exist so PolandClip keeps their clip path; only the layers come and go */}
+        <Pane name={ORTO_PANE} style={{ zIndex: 199 }}>
+          {baseLayer === 'orto' && (
+            <WMSTileLayer
+              url="https://mapy.geoportal.gov.pl/wss/service/PZGIK/ORTO/WMS/StandardResolution"
+              layers="Raster"
+              format="image/jpeg"
+              transparent={false}
+              maxZoom={19}
+              attribution="Geoportal.gov.pl (GUGiK)"
+            />
+          )}
+        </Pane>
 
         {showParcels && zoom >= PARCELS_MIN_ZOOM && (
           <WMSTileLayer
@@ -705,31 +843,28 @@ export function ParcelMap({
           </Pane>
         )}
 
-        {showDrought && edoReady && (
-          <WMSTileLayer
-            key={`edo-${edoTime ?? 'default'}-${edoAttempt}`}
-            url={EDO_WMS_URL}
-            layers={EDO_LAYER}
-            format="image/png"
-            transparent
-            opacity={0.56}
-            tileSize={EDO_TILE_SIZE}
-            maxNativeZoom={EDO_MAX_NATIVE_ZOOM}
-            // the EDO server is case-sensitive: Leaflet's default lower-case "service=…&request=…" gets
-            // HTTP 400 (an HTML page that Chrome blocks as ERR_BLOCKED_BY_ORB), so every tile used to fail
-            uppercase
-            maxZoom={19}
-            // TIME must be an exact dekad (1st / 11th / 21st) or the server answers 400 for every tile
-            params={{ layers: EDO_LAYER, ...(edoTime ? { TIME: edoTime } : {}) }}
-            attribution="Copernicus EDO"
-            eventHandlers={{
-              loading: () => setEdoTiles({ loading: true, loaded: 0, failed: 0 }),
-              load: () => setEdoTiles((s) => ({ ...s, loading: false })),
-              tileload: () => setEdoTiles((s) => ({ ...s, loaded: s.loaded + 1 })),
-              tileerror: () => setEdoTiles((s) => ({ ...s, failed: s.failed + 1 })),
-            }}
-          />
-        )}
+        <Pane name={DROUGHT_PANE} style={{ zIndex: 210 }}>
+          {showDrought && edoReady && (
+            <WMSTileLayer
+              key={`edo-${edoTime ?? 'default'}-${edoAttempt}`}
+              url={EDO_WMS_URL}
+              layers={EDO_LAYER}
+              format="image/png"
+              transparent
+              opacity={0.56}
+              tileSize={EDO_TILE_SIZE}
+              maxNativeZoom={EDO_MAX_NATIVE_ZOOM}
+              // the EDO server is case-sensitive: Leaflet's default lower-case "service=…&request=…" gets
+              // HTTP 400 (an HTML page that Chrome blocks as ERR_BLOCKED_BY_ORB), so every tile used to fail
+              uppercase
+              maxZoom={19}
+              // TIME must be an exact dekad (1st / 11th / 21st) or the server answers 400 for every tile
+              params={edoParams}
+              attribution="Copernicus EDO"
+              eventHandlers={edoEvents}
+            />
+          )}
+        </Pane>
 
         {selectedPoint && !selectionOutline && !polygon && (
           <Marker position={[selectedPoint.lat, selectedPoint.lon]} icon={SELECTED_PIN_ICON} />
@@ -828,6 +963,7 @@ export function ParcelMap({
         />
         <ViewportContext enabled={showViewportWater} onChange={handleViewContext} />
         <DevMapHandle interactive={interactive} />
+        <PolandClip />
         <MapRef mapRef={mapRef} />
         {/* ditches / fields come from OSM even over the aerial photo, so credit OSM whenever they are drawn */}
         {baseLayer !== 'osm' && (viewWater.length > 0 || fields.length > 0 || (water?.features.length ?? 0) > 0) && (
@@ -971,17 +1107,18 @@ export function ParcelMap({
                     ))}
                 </span>
               </p>
+              {/* swatches use the exact colours of the EDO "cdiad" tiles (GetLegendGraphic: Watch / Warning / Alert) */}
               <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1" style={{ color: 'var(--ink-secondary)' }}>
                 <span className="inline-flex items-center gap-1.5">
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: '#eab308' }} />
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: '#f0e442' }} />
                   {t.edoLegendWatch}
                 </span>
                 <span className="inline-flex items-center gap-1.5">
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: '#ea580c' }} />
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: '#e69f00' }} />
                   {t.edoLegendWarning}
                 </span>
                 <span className="inline-flex items-center gap-1.5">
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: '#dc2626' }} />
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: '#dc050c' }} />
                   {t.edoLegendAlert}
                 </span>
               </div>
