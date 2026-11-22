@@ -1,644 +1,286 @@
-<div align="center">
+# WodoPlon
 
-# 🌾💧 WodoPlon
+WodoPlon is a web app that helps Polish farmers understand the water situation on a specific field and decide what
+to do about it. You pick a parcel, a crop and a date. The app pulls open weather, satellite, soil, terrain and
+hydrography data for that exact parcel and turns it into a short report in Polish or English.
 
-**Cyfrowy asystent wodny dla rolników · Digital water assistant for farmers**
+It runs without accounts, API keys or paid services, and there is no LLM involved at runtime: every number and
+recommendation comes from a deterministic engine built on the FAO-56 crop water model.
 
-*KOWR — „Zatrzymaj wodę, chroń plony” · HackNation 2026*
+The project started at HackNation 2026 for the KOWR challenge "Zatrzymaj wodę, chroń plony" (keep the water, protect
+the crops).
 
-![.NET](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)
-![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
-![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)
-![PostGIS](https://img.shields.io/badge/PostGIS-3.5-336791?logo=postgresql&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
-![License](https://img.shields.io/badge/license-Apache--2.0-green)
-![API keys](https://img.shields.io/badge/API%20keys-none%20needed-brightgreen)
+## Contents
 
-**[🇵🇱 Polski](#-polski)** · **[🇬🇧 English](#-english)**
+- [What the report contains](#what-the-report-contains)
+- [Quick start](#quick-start)
+- [How it works](#how-it-works)
+- [API](#api)
+- [Development](#development)
+- [Production deployment](#production-deployment)
+- [Troubleshooting](#troubleshooting)
+- [Data sources](#data-sources)
+- [Limitations](#limitations)
+- [Documentation](#documentation)
+- [License](#license)
 
-</div>
+## What the report contains
 
----
+A parcel can be selected by its cadastral (TERYT) ID, for example `141611_2.0018.103`, or by clicking on the map.
+The boundary comes from the national ULDK service, and the app warns you if the plot is registered as built-up land,
+forest, road or water. Five crops are supported (winter wheat, maize, winter rapeseed, sugar beet, potato), and the
+analysis date can be anything from today back to ten years ago.
 
-# 🇵🇱 Polski
+The report always follows the same four steps:
 
-## ⚡ TL;DR dla jury
+1. **Water situation.** The 90-day water balance (`P − Kc·ET₀`) compared with the median of the same window over the
+   previous ten years at this parcel, rainfall against the norm, the longest dry spell, how often drought occurred,
+   Sentinel-2 NDVI/NDWI, plus soil, slope and distance to water. A confidence indicator shows how complete the input
+   data was.
+2. **Causes and retention measures.** Landscape measures come first (weirs on ditches, contour tillage, buffer
+   strips), then soil measures (mulching, crop residues, cover crops, reduced tillage). Each one is tied to a
+   specific finding for the parcel.
+3. **Irrigation, as a last resort.** Suggested only at `HIGH` or `CRITICAL` risk during the crop's critical months
+   (or when NDWI is below −0.15), with a dose of 15–35 mm (150–350 m³/ha).
+4. **Sources and limitations.** Every data source with dates, satellite scene dates and cloud cover. Data that could
+   not be fetched is reported as missing rather than estimated.
 
-Potrzebny jest tylko **Docker z Compose v2**. Bez kluczy API, kont i logowania.
+Reports get a permanent link (`/report/{reportUuid}`) and can be printed or saved as PDF. The map offers OSM,
+Geoportal orthophoto, cadastral boundaries, the Copernicus EDO drought index, nearby ditches and fields, and runoff
+direction on slopes. The UI works on phones and has a high-contrast theme.
+
+## Quick start
+
+You need Docker with Compose v2. The first build takes a few minutes.
 
 ```bash
-git clone https://github.com/nikwaeis/HackNation2026.git && cd HackNation2026
+git clone https://github.com/nikwaeis/HackNation2026.git
+cd HackNation2026
 
-# 1. Plik .env z włączonym ładowaniem listy upraw
+# Create .env and enable seeding of the crop list
 sed 's/DATABASE_RUNSEED=false/DATABASE_RUNSEED=true/' .env.example > .env
 
-# 2. Budowa i start (pierwsza budowa: kilka minut)
 docker compose -f docker-compose.dev.yml up -d --build
 
-# 3. Czekamy, aż API odpowie {"status":"ok"}
+# Wait until this returns {"status":"ok"}
 curl http://localhost:5254/api/health
+```
 
-# 4. (Zalecane przed demo) import sieci wodnej Polski z OSM: ~2,1 GB pobierania, ~10 min
+On Windows without a POSIX shell, copy `.env.example` to `.env` and change `DATABASE_RUNSEED` to `true` by hand.
+Without it the crop list stays empty.
+
+Open http://localhost:5173. To try it, enter parcel `041509_2.0004.437/3`, choose winter wheat (*Pszenica ozima*),
+set the date to `2026-06-15` and run the analysis. The first analysis of a parcel takes 10–20 seconds because the
+data is fetched live from several services. After that it is cached and comes back in under a second.
+
+### Importing the water network (recommended)
+
+Distance to the nearest river, ditch or lake is looked up in a local copy of the OSM water network for Poland. Until
+that copy exists, the API falls back to the public Overpass API in the background, which is often slow, and the
+report will say that water data is still loading. The import downloads about 2.1 GB and takes around ten minutes:
+
+```bash
 docker compose -f docker-compose.dev.yml run --rm osm-import
 ```
 
-Następnie otwórz **http://localhost:5173** 🎉
-
-> [!TIP]
-> **Szybki test:** wpisz identyfikator działki `041509_2.0004.437/3` (albo kliknij pole na mapie), wybierz
-> *Pszenica ozima*, datę `2026-06-15` i kliknij „Analizuj”. Pierwsza analiza nowej działki trwa ok. **10–20 s**
-> (dane na żywo z 5 źródeł), każda kolejna **< 1 s** (cache).
-
-## 📖 Spis treści
-
-- [Czym jest WodoPlon](#-czym-jest-wodoplon)
-- [Funkcje](#-funkcje)
-- [Uruchomienie krok po kroku](#-uruchomienie-krok-po-kroku)
-- [Ważne niuanse](#%EF%B8%8F-ważne-niuanse)
-- [Rozwiązywanie problemów](#-rozwiązywanie-problemów)
-- [Testy](#-testy)
-- [Architektura](#%EF%B8%8F-architektura)
-- [Źródła danych](#%EF%B8%8F-źródła-danych)
-- [Ograniczenia](#-ograniczenia)
-- [Skalowanie i bezpieczeństwo](#-skalowanie-i-bezpieczeństwo)
-- [Użycie AI](#-użycie-ai)
-
-## 🌱 Czym jest WodoPlon
-
-Rolnik wybiera działkę (identyfikator TERYT lub kliknięcie na mapie), uprawę i datę analizy (dziś lub do 10 lat
-wstecz). WodoPlon łączy otwarte dane przestrzenne, meteorologiczne, satelitarne, glebowe i hydrologiczne i tworzy
-**zrozumiały raport (PL / EN)**: bieżąca sytuacja wodna i 10-letnia historia suszy, przyczyny, priorytetowe działania
-retencyjne, nawadnianie jako ostateczność oraz pełne źródła danych z niepewnością i ograniczeniami.
-
-**Bez logowania · bez danych osobowych · bez płatnych API · bez LLM w trakcie działania.**
-
-## ✨ Funkcje
-
-- 🗺️ **Wybór działki bez GIS** — identyfikator (np. `141611_2.0018.103`) lub kliknięcie na mapie. Granice z ULDK
-  GUGiK, ostrzeżenie EGiB/TERYT przy działce nierolnej (zabudowa, las, droga, woda).
-- 🌾 **5 upraw** (pszenica ozima, kukurydza, rzepak ozimy, burak cukrowy, ziemniak) ze współczynnikami FAO-56,
-  dowolna data do 10 lat wstecz.
-- 📋 **4-etapowy raport KOWR** (ścisła kolejność):
-  1. **Ocena sytuacji wodnej** — 90-dniowy bilans FAO-56 (`P − Kc·ET₀`) vs. 10-letnia mediana działki, opady vs.
-     norma, najdłuższa susza, częstość suszy, NDVI/NDWI z Sentinel-2, gleba/spadek/woda, wskaźnik *„Wiarygodność oceny”*.
-  2. **Przyczyny i rekomendacje retencyjne** — najpierw retencja krajobrazowa (zastawki na rowach, uprawa w
-     poprzek stoku, strefy buforowe), potem glebowa (mulczowanie, resztki pożniwne, międzyplony, uprawa uproszczona).
-  3. **Nawadnianie (ostateczność)** — tylko przy ryzyku `HIGH`/`CRITICAL` w krytycznych miesiącach (lub `NDWI < −0,15`),
-     z dawką `15–35 mm` (`150–350 m³/ha`).
-  4. **Źródła i ograniczenia** — dokładne źródła, daty scen, zachmurzenie; brak danych to *„Brak danych”*, nie fikcja.
-- 🔗 **Link do raportu** (`/report/{reportUuid}`), 🖨️ druk / PDF, 📱 widok mobilny, 🌐 PL/EN, 🌓 tryb *Kontrast*.
-- 🛰️ **Warstwy mapy** — OSM, ortofotomapa Geoportalu, granice działek KIEG, susza Copernicus EDO (CDI), rowy i pola
-  z OSM, strzałki spływu na stokach.
-
-## 🚀 Uruchomienie krok po kroku
-
-### Wymagania
-
-| | |
-|---|---|
-| 🐳 Docker | Docker Desktop / Engine z Compose v2 (`docker compose version`) |
-| 💾 Dysk | ~6 GB: obrazy ~2 GB, ekstrakt OSM 2,1 GB, baza ~0,7 GB po imporcie |
-| 🌐 Sieć | Wychodzący HTTPS do publicznych serwisów danych; najlepiej własne IP (Open-Meteo i Overpass limitują per IP) |
-| 🔧 Opcjonalnie | .NET 10 SDK, Python 3.11, Node.js 22 — tylko do testów / uruchamiania bez Dockera |
-
-### Adresy po starcie
-
-| Serwis | URL |
-|---|---|
-| 🖥️ Aplikacja | http://localhost:5173 |
-| ❤️ Health API | http://localhost:5254/api/health |
-| 📜 OpenAPI | http://localhost:5254/openapi/v1.json |
-| 🐍 Geo-Worker | http://localhost:8000/health |
-
-### Test API przez curl
-
-```bash
-curl http://localhost:5254/api/crops     # 5 upraw
-
-curl -X POST http://localhost:5254/api/analyze -H "Content-Type: application/json" \
-  -d '{"dzialkaId":"041509_2.0004.437/3","cropId":"winter_wheat","targetDate":"2026-06-15"}'
-
-# po współrzędnych, teksty po angielsku
-curl -X POST http://localhost:5254/api/analyze -H "Content-Type: application/json" -H "Accept-Language: en" \
-  -d '{"lat":53.0605,"lon":18.4410,"cropId":"winter_wheat","targetDate":"2026-06-15"}'
-
-curl http://localhost:5254/api/reports/<reportUuid>   # zapisany raport
-```
-
-`cropId`: `winter_wheat` · `maize` · `rapeseed` · `sugar_beet` · `potato`
-
-### Tylko frontend (bez backendu)
-
-```bash
-cd src/frontend && npm install && npm run dev
-```
-
-Gdy backend jest niedostępny, przycisk **„Zobacz przykładowy raport”** pokazuje oznaczony raport demonstracyjny.
-
-### Przydatne komendy
-
-```bash
-docker compose -f docker-compose.dev.yml logs -f api   # logi API
-docker compose -f docker-compose.dev.yml down          # stop
-docker compose -f docker-compose.dev.yml down -v       # stop + usunięcie bazy I pobranego OSM (2,1 GB)
-```
-
-Produkcja (nginx, Docker secrets, ręczne migracje): **[`docs/setup.md`](docs/setup.md#6-production)**.
-
-## ⚠️ Ważne niuanse
-
-> [!IMPORTANT]
-> **`DATABASE_RUNSEED=true`** w `.env` jest potrzebne przy pierwszym starcie — inaczej lista upraw jest pusta.
-> Komenda `sed` z TL;DR ustawia to automatycznie. Można zostawić włączone (dodaje tylko brakujące uprawy).
-
-> [!IMPORTANT]
-> **Import OSM (`osm-import`)** nie jest wymagany, ale bardzo zalecany przed demo. Bez niego odległość do wody
-> jest pobierana w tle z publicznego Overpass API, który bywa przeciążony — raport pokaże wtedy
-> *„dane o wodzie wciąż się ładują”*. Po imporcie API korzysta z niego od razu, bez restartu.
-
-> [!WARNING]
-> **Limity zewnętrznych serwisów:** Open-Meteo i Overpass limitują per IP. Na wspólnej sieci (np. Wi-Fi na
-> wydarzeniu) dzienny limit może się wyczerpać → `500` z komunikatem o pogodzie. Pomaga inna sieć (np. hotspot).
-
-- ⏱️ **Czasy:** pierwsza analiza działki 10–20 s (zimny start do < 30 s), powtórka < 1 s.
-- 🚦 **Limit API:** 10 analiz/min na klienta, 30/min na IP → `429` z `Retry-After`. Błędne żądania się nie liczą.
-- 📅 **Ostatnie dni:** archiwum Open-Meteo ma ~5 dni opóźnienia — data z tego okna jest oznaczana w raporcie.
-- 🛰️ **Satelita:** `satelliteStatus` = `OK` / `CLOUDY_FALLBACK` / `NO_DATA` (chmury) / `ERROR` (ponowienie przy kolejnym żądaniu).
-- `null` w metrykach to **uczciwy brak danych**, wyjaśniony w kroku 4 raportu.
-- 🔍 **Mapa:** granice działek GUGiK rysują się dopiero od **zoomu 17**; siatka suszy EDO ma ~5 km.
-- 🔌 Porty zmienisz w `.env`: `API_PORT`, `FRONTEND_PORT`, `POSTGRES_PORT`, `REDIS_PORT`, `PYTHON_SERVICE_PORT`.
-- 🧩 Migracje bazy uruchamiają się same **tylko w Development** (produkcja: [`docs/setup.md`](docs/setup.md#6-production)).
-
-## 🩺 Rozwiązywanie problemów
-
-| Objaw | Przyczyna / rozwiązanie |
-|---|---|
-| Lista upraw jest pusta | Brak `DATABASE_RUNSEED=true` w `.env` → popraw i `docker compose -f docker-compose.dev.yml up -d` |
-| „Dane o wodzie wciąż się ładują” | Nie wykonano importu OSM, Overpass przeciążony → uruchom `osm-import` |
-| `429 Too Many Requests` | Limit API — odczekaj `Retry-After` |
-| `500` z komunikatem o pogodzie | Open-Meteo niedostępne lub wyczerpany limit IP → spróbuj później / z innej sieci |
-| Import OSM pada na kroku 1/4 (`404`, `502`, zawieszenie) | Geofabrik nie opublikował jeszcze najnowszego pliku; skrypt próbuje 3 poprzednich dni. Ponów później lub podaj `-e PBF_URL=https://download.geofabrik.de/europe/poland/poland-YYMMDD.osm.pbf` |
-| `slopeDeg: null` | GUGiK NMT nie odpowiedział na czas — kolejna analiza ponowi |
-| `satelliteStatus: ERROR` | Geo-Worker / Earth Search niedostępny → `docker compose -f docker-compose.dev.yml logs python-service` |
-| Kontener API staje po zmianie kodu | Hot reload `dotnet watch` padł → `docker compose -f docker-compose.dev.yml restart api` |
-| Port zajęty | Zmień port w `.env` (np. `FRONTEND_PORT=5174`) |
-| Czysta baza od zera | `down`, `docker volume rm wodoplon-dev_pgdata`, `up -d`, import ponownie |
-
-## 🧪 Testy
-
-```bash
-dotnet test src/backend/WodoPlon.slnx                                  # backend (xUnit)
-cd src/python-service && pip install -r requirements-dev.txt && pytest  # Geo-Worker (bez sieci)
-cd src/frontend && npm install && npm test                             # frontend (Vitest)
-cd src/frontend && npm run test:e2e                                    # E2E Playwright (żywe ULDK/GUGiK)
-```
-
-Testy sprawdzają: matematykę FAO-56 i bilansu, progi `LOW`/`MODERATE`/`HIGH`/`CRITICAL`, wszystkie 4 wyzwalacze
-retencji, kolejność krajobraz → gleba, warunki i dawkę nawadniania, coalescing żądań, teksty PL/EN, degradację przy
-awariach API, NDVI/NDWI i maskę chmur, parsowanie WKT, kolejność 4 etapów raportu, widok mobilny i druk.
-Zrzuty E2E: `src/frontend/e2e-results/screens/` (`E2E_ALL_BROWSERS=1` → także Firefox/WebKit).
-
-## 🏗️ Architektura
-
-```
-React (Leaflet) ──/api──► ASP.NET Core API ──► PostgreSQL 17 + PostGIS 3.5 (cache, uprawy, hydro, raporty)
-                ──/uldk─►  (orkiestrator)  ──► Redis 7 (rate limiting, HybridCache)
-                                           ──► Python Geo-Worker (NMT + Sentinel-2)
-                                           ──► ULDK, Open-Meteo, SoilGrids, Overpass (fallback)
-```
-
-| Komponent | Ścieżka | Stack |
-|---|---|---|
-| Frontend | `src/frontend/` | React 19, TypeScript, Vite, Tailwind 4, Leaflet |
-| Backend API | `src/backend/` | .NET 10 Minimal API, EF Core, NetTopologySuite, CQRS |
-| Geo-Worker | `src/python-service/` | Python 3.11, FastAPI, rasterio, shapely, pyproj |
-| Import OSM | `scripts/import-osm-water.sh` | GDAL `ogr2ogr` (~1,3 mln obiektów wodnych) |
-
-**Jak działa analiza:** (1) profil statyczny działki raz i w cache (granice, gleba, najbliższa woda, spadek) →
-(2) obserwacja dynamiczna per `(działka, data)`: 10 lat pogody + Sentinel-2 równolegle → (3) deterministyczny
-`AnalysisEngine` (FAO-56, mediana 10-letnia, próg `CRITICAL < −180 mm`) → (4) raport z szablonów PL/EN.
-
-Dokumentacja: [API i algorytm](docs/api.md) · [model danych](docs/data.md) · [uruchomienie](docs/setup.md) · [plan](docs/plan/00-overview.md)
-
-## 🛰️ Źródła danych
-
-Wszystkie diagnozy i rekomendacje są **liczone na żywo** z otwartych danych — brak zakodowanych wyników.
-
-| Dane | Źródło | Licencja |
-|---|---|---|
-| Parametry upraw | FAO-56 | metodyka publiczna |
-| Granice działek | ULDK GUGiK | otwarte dane GUGiK |
-| Spadek terenu | Geoportal NMT WCS (1 m) | otwarte dane GUGiK |
-| Gleba (0–30 cm) | ISRIC SoilGrids v2.0 (250 m) | CC BY 4.0 |
-| Pogoda (10 lat) | Open-Meteo Archive | CC BY 4.0 |
-| NDVI / NDWI | Sentinel-2 L2A (Earth Search STAC) | Copernicus, otwarte |
-| Hydrografia | OSM / Geofabrik, Overpass (fallback) | ODbL 1.0 |
-
-Szczegóły zakresu, odświeżania i warstw mapy: [sekcja angielska](#%EF%B8%8F-data-sources).
-
-## 🚧 Ograniczenia
-
-- SoilGrids 250 m nie widzi zmienności w obrębie pola; przy braku danych → glina średnia (`130 mm/m`), jawnie w raporcie.
-- Długie zachmurzenie w oknie `±15 dni` → brak danych satelitarnych (niższa wiarygodność).
-- Open-Meteo: ~5 dni opóźnienia, siatka ~9–11 km.
-- Brak danych z piezometrów / czujników i brak weryfikacji pozwoleń wodnoprawnych.
-- Wykrywanie rowów (`≤ 1000 m`) zależy od kompletności OSM.
-- 5 upraw, miesięczne etapy `Kc` (bez własnych dat siewu).
-- *„Wiarygodność oceny”* = kompletność danych, nie przedział ufności.
-
-## 🔐 Skalowanie i bezpieczeństwo
-
-- **Cache wielopoziomowy w PostGIS** + import hydrografii → brak Overpass na gorącej ścieżce.
-- **Request coalescing**, limity Redis, timeouty, łagodna degradacja (brak HTTP 500 przy awarii warstwy opcjonalnej).
-- API i Geo-Worker są bezstanowe → skalowanie poziome. Prototyp: **0 zł kosztów API**; produkcja krajowa ok.
-  **200–600 EUR/mies.** (szczegóły w [sekcji angielskiej](#-scalability--security)).
-- **Zero PII**, walidacja wejścia, jawny CORS, zaufany `X-Forwarded-For` tylko z sieci prywatnych, sekrety przez Docker secrets.
-
-## 🤖 Użycie AI
-
-- **W działaniu:** brak — obliczenia, rekomendacje i teksty PL/EN są deterministyczne.
-- **Podczas tworzenia:** asystenci Claude Code (Anthropic) i Antigravity (Google) pomagali przy UI, testach,
-  hardeningu i dokumentacji. Cały kod został przejrzany, uruchomiony i zweryfikowany przez zespół.
-
----
-
-# 🇬🇧 English
-
-## ⚡ TL;DR for the jury
-
-All you need is **Docker with Compose v2**. No API keys, accounts or login.
-
-```bash
-git clone https://github.com/nikwaeis/HackNation2026.git && cd HackNation2026
-
-# 1. .env with crop seeding enabled
-sed 's/DATABASE_RUNSEED=false/DATABASE_RUNSEED=true/' .env.example > .env
-
-# 2. Build and start (first build takes a few minutes)
-docker compose -f docker-compose.dev.yml up -d --build
-
-# 3. Wait until the API answers {"status":"ok"}
-curl http://localhost:5254/api/health
-
-# 4. (Recommended before a demo) import Poland's water network from OSM: ~2.1 GB download, ~10 min
-docker compose -f docker-compose.dev.yml run --rm osm-import
-```
-
-Then open **http://localhost:5173** 🎉
-
-> [!TIP]
-> **Quick check:** enter parcel ID `041509_2.0004.437/3` (or click a field on the map), pick *Pszenica ozima*
-> (winter wheat), date `2026-06-15` and run the analysis. The first analysis of a new parcel takes about
-> **10–20 s** (live data from 5 sources); repeats take **< 1 s** (cache).
-
-## 📖 Contents
-
-- [What is WodoPlon](#-what-is-wodoplon)
-- [Features](#-features)
-- [Step-by-step setup](#-step-by-step-setup)
-- [Important nuances](#%EF%B8%8F-important-nuances)
-- [Troubleshooting](#-troubleshooting)
-- [Tests](#-tests)
-- [Architecture](#%EF%B8%8F-architecture)
-- [Data sources](#%EF%B8%8F-data-sources)
-- [Limitations](#-limitations)
-- [Scalability & security](#-scalability--security)
-- [Use of AI](#-use-of-ai)
-- [Licences](#-components--licences)
-
-## 🌱 What is WodoPlon
-
-A farmer picks a parcel (Polish TERYT cadastral ID or a click on the map), a crop and an analysis date (today or up
-to 10 years back). WodoPlon combines open spatial, weather, satellite, soil and hydrological data into a
-**plain-language report (PL / EN)**: current water situation and 10-year drought history, causes, prioritized
-retention measures, irrigation as a last resort, and full data provenance with uncertainty and limitations.
-
-**No login · no personal data · no paid APIs · no LLM at runtime.**
-
-## ✨ Features
-
-- 🗺️ **Zero-GIS parcel selection** — cadastral ID (e.g. `141611_2.0018.103`) or map click. Boundary from ULDK GUGiK,
-  EGiB/TERYT warning for non-agricultural plots (built-up, forest, road, water).
-- 🌾 **5 crops** (winter wheat, maize, winter rapeseed, sugar beet, potato) with FAO-56 coefficients, any date up to
-  10 years back.
-- 📋 **4-stage KOWR report** (strict order):
-  1. **Water situation** — 90-day FAO-56 balance (`P − Kc·ET₀`) vs. the parcel's own 10-year median, rainfall vs.
-     norm, longest dry spell, drought frequency, Sentinel-2 NDVI/NDWI, soil/slope/water, *„Wiarygodność oceny”* badge.
-  2. **Causes & retention** — landscape first (ditch weirs, contour tillage, buffer strips), then soil measures
-     (mulching, crop residues, cover crops, reduced tillage), each justified by parcel data.
-  3. **Irrigation (last resort)** — only at `HIGH`/`CRITICAL` risk in critical months (or `NDWI < −0.15`), dose
-     `15–35 mm` (`150–350 m³/ha`).
-  4. **Sources & limitations** — exact sources, scene dates, cloud cover; missing data shows as *„Brak danych”*.
-- 🔗 **Shareable link** (`/report/{reportUuid}`), 🖨️ print / PDF, 📱 mobile layout, 🌐 PL/EN, 🌓 *Kontrast* theme.
-- 🛰️ **Map overlays** — OSM, Geoportal orthophoto, KIEG parcel boundaries, Copernicus EDO drought (CDI), OSM ditches
-  and fields, slope runoff arrows.
-
-## 🚀 Step-by-step setup
+The API picks up the imported data immediately. Re-run the import once a month to refresh it.
 
 ### Requirements
 
 | | |
 |---|---|
-| 🐳 Docker | Docker Desktop / Engine with Compose v2 (`docker compose version`) |
-| 💾 Disk | ~6 GB: images ~2 GB, OSM extract 2.1 GB, database ~0.7 GB after import |
-| 🌐 Network | Outbound HTTPS to public data services; a non-shared IP is best (Open-Meteo and Overpass limit per IP) |
-| 🔧 Optional | .NET 10 SDK, Python 3.11, Node.js 22 — only for tests / running without Docker |
+| Docker | Docker Desktop or Docker Engine with Compose v2 |
+| Disk | About 6 GB: images ~2 GB, OSM extract 2.1 GB, database ~0.7 GB after the import |
+| Network | Outbound HTTPS to the public data services. Open-Meteo and Overpass rate-limit per IP, so a shared network can run out of quota. |
+| Optional | .NET 10 SDK, Python 3.11 and Node.js 22, only for running tests or services outside Docker |
 
-### URLs
+### Local URLs
 
 | Service | URL |
 |---|---|
-| 🖥️ Web app | http://localhost:5173 |
-| ❤️ API health | http://localhost:5254/api/health |
-| 📜 OpenAPI | http://localhost:5254/openapi/v1.json |
-| 🐍 Geo-Worker | http://localhost:8000/health |
+| Web app | http://localhost:5173 |
+| API health | http://localhost:5254/api/health |
+| OpenAPI spec | http://localhost:5254/openapi/v1.json |
+| Geo-worker health | http://localhost:8000/health |
 
-### API smoke test
+Ports can be changed in `.env` with `API_PORT`, `FRONTEND_PORT`, `POSTGRES_PORT`, `REDIS_PORT` and
+`PYTHON_SERVICE_PORT`.
 
-```bash
-curl http://localhost:5254/api/crops     # 5 crops
+## How it works
 
-curl -X POST http://localhost:5254/api/analyze -H "Content-Type: application/json" \
-  -d '{"dzialkaId":"041509_2.0004.437/3","cropId":"winter_wheat","targetDate":"2026-06-15"}'
-
-# by coordinates, English texts
-curl -X POST http://localhost:5254/api/analyze -H "Content-Type: application/json" -H "Accept-Language: en" \
-  -d '{"lat":53.0605,"lon":18.4410,"cropId":"winter_wheat","targetDate":"2026-06-15"}'
-
-curl http://localhost:5254/api/reports/<reportUuid>   # saved report
+```
+React + Leaflet ──/api───► ASP.NET Core API ──► PostgreSQL 17 + PostGIS 3.5
+                ──/uldk──►                  ──► Redis 7
+                                            ──► Python geo-worker (terrain, Sentinel-2)
+                                            ──► ULDK, Open-Meteo, SoilGrids, Overpass
 ```
 
-`cropId`: `winter_wheat` · `maize` · `rapeseed` · `sugar_beet` · `potato`
+| Component | Path | Stack | Responsibility |
+|---|---|---|---|
+| Frontend | `src/frontend/` | React 19, TypeScript, Vite, Tailwind CSS 4, Leaflet | Map, parcel lookup, report view, sharing, printing, PL/EN |
+| API | `src/backend/` | .NET 10 minimal API, EF Core, NetTopologySuite | Orchestration, caching, request coalescing, analysis engine, reports |
+| Geo-worker | `src/python-service/` | Python 3.11, FastAPI, rasterio, shapely, pyproj | Slope from the GUGiK elevation model, NDVI/NDWI from Sentinel-2 |
+| OSM importer | `scripts/import-osm-water.sh` | GDAL `ogr2ogr` | Loads about 1.3 million Polish water features into PostGIS |
+| Database | | PostgreSQL 17 + PostGIS 3.5 | Crops, hydrography, parcel profiles, observations, saved reports |
+| Cache | | Redis 7 | Rate limiting and HybridCache |
+
+An analysis runs in four stages:
+
+1. **Static parcel profile.** Boundary, soil and available water capacity, nearest water and slope. Computed once
+   per parcel and cached.
+2. **Dynamic observation** for each parcel and date: ten years of daily weather for the same 90-day window and the
+   most recent cloud-free Sentinel-2 scene, fetched in parallel. If several requests for the same parcel arrive at
+   once, they share a single fetch.
+3. **Assessment.** The engine compares the current balance with the parcel's own ten-year median, then adjusts the
+   result for dry spells, NDWI, sandy soil and drought history. The outcome is one of four levels: `LOW`,
+   `MODERATE`, `HIGH`, `CRITICAL`.
+4. **Report.** Text is rendered from Polish and English templates, with sources and limitations attached.
+
+If an optional source fails, the analysis still completes. For example, if the geo-worker is down, the satellite
+status is reported as `ERROR`. If SoilGrids is unavailable, medium-loam defaults are used. Either way, the report
+says so.
+
+## API
 
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/api/health` | Health check |
-| `GET` | `/api/crops` | Crops with FAO-56 coefficients |
-| `POST` | `/api/analyze` | `{ dzialkaId \| lat+lon, cropId, targetDate }`, `Accept-Language: pl \| en` |
-| `GET` | `/api/reports/{reportUuid}` | Saved report (shareable link) |
+| `GET` | `/api/crops` | Supported crops with their FAO-56 coefficients |
+| `POST` | `/api/analyze` | Run an analysis. Body: `dzialkaId` or `lat` + `lon`, plus `cropId` and `targetDate` |
+| `GET` | `/api/reports/{reportUuid}` | Fetch a saved report |
 
-### Frontend only (no backend)
+Crop IDs are `winter_wheat`, `maize`, `rapeseed`, `sugar_beet` and `potato`. Send `Accept-Language: en` to get the
+report in English (Polish is the default).
 
 ```bash
-cd src/frontend && npm install && npm run dev
+curl -X POST http://localhost:5254/api/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"dzialkaId":"041509_2.0004.437/3","cropId":"winter_wheat","targetDate":"2026-06-15"}'
+
+# By coordinates, with English text
+curl -X POST http://localhost:5254/api/analyze \
+  -H "Content-Type: application/json" -H "Accept-Language: en" \
+  -d '{"lat":53.0605,"lon":18.4410,"cropId":"winter_wheat","targetDate":"2026-06-15"}'
 ```
 
-With the backend offline, **„Zobacz przykładowy raport”** opens a clearly labelled demo report. `/api` is proxied to
-`http://localhost:5254` (override with `VITE_API_PROXY_TARGET` or `VITE_API_BASE_URL`).
+`POST /api/analyze` is limited to 10 requests per minute per client and 30 per minute per IP. Over the limit it
+returns `429` with a `Retry-After` header. Invalid requests don't count towards the limit.
 
-### Useful commands
+Some fields in the response can be `null`. That means the data was not available, and step 4 of the report explains
+why. The full request and response schema is in [docs/api.md](docs/api.md).
+
+## Development
+
+In the dev compose setup, source folders are mounted into the containers, so the API, frontend and geo-worker reload
+on changes.
 
 ```bash
-docker compose -f docker-compose.dev.yml logs -f api   # API logs
-docker compose -f docker-compose.dev.yml down          # stop
-docker compose -f docker-compose.dev.yml down -v       # stop + wipe database AND the OSM download (2.1 GB)
+docker compose -f docker-compose.dev.yml logs -f api   # follow API logs
+docker compose -f docker-compose.dev.yml down          # stop everything
+docker compose -f docker-compose.dev.yml down -v       # stop and delete the database and the OSM download
 ```
 
-Hot reload is on for the API, frontend and Geo-Worker (sources are mounted into the containers).
-
-### Production
+To work on the frontend alone:
 
 ```bash
-cp .env.prod.example .env.prod          # set POSTGRES_DB, POSTGRES_USER, Cors__WebOrigin
-mkdir secrets
-# one value per file, no trailing newline:
-#   secrets/db_password       <password>
-#   secrets/db_connection     Host=postgres;Database=<POSTGRES_DB>;Username=<POSTGRES_USER>;Password=<password>
-#   secrets/redis_password    <password>
-#   secrets/redis_connection  redis:6379,password=<password>
+cd src/frontend
+npm install
+npm run dev
+```
+
+The dev server proxies `/api` to `http://localhost:5254`. You can point it elsewhere with `VITE_API_PROXY_TARGET`.
+When no backend is reachable, the "Zobacz przykładowy raport" button opens a demo report that is clearly marked as
+such.
+
+### Tests
+
+```bash
+dotnet test src/backend/WodoPlon.slnx                                    # API and engine (xUnit)
+cd src/python-service && pip install -r requirements-dev.txt && pytest   # geo-worker, no network needed
+cd src/frontend && npm install && npm test                               # frontend unit tests (Vitest)
+cd src/frontend && npm run test:e2e                                      # end-to-end (Playwright)
+```
+
+The backend tests cover the water-balance math, risk thresholds, retention and irrigation rules, request coalescing,
+localized texts and behaviour when upstream services fail. Python tests cover the geo-worker contract, slope
+calculation, cloud masking and NDVI/NDWI. The Playwright suite uses the live ULDK and GUGiK services with a stubbed
+`/api`. Set `E2E_ALL_BROWSERS=1` to run it in Firefox and WebKit as well.
+
+## Production deployment
+
+```bash
+cp .env.prod.example .env.prod     # set POSTGRES_DB, POSTGRES_USER and Cors__WebOrigin
+mkdir secrets                      # db_password, db_connection, redis_password, redis_connection
 docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
 ```
 
-nginx serves the SPA on port `80` and proxies `/api` and `/uldk`; the Geo-Worker has no public port. Always pass
-`--env-file .env.prod`. Migrations run automatically **only in Development** — production migrations, crop seeding
-and proxy networks: [`docs/setup.md`](docs/setup.md#6-production).
+In production, nginx serves the built frontend on port 80 and proxies `/api` and `/uldk`. The geo-worker is not
+exposed. Credentials are read from Docker secrets and never live in the repository. Database migrations run
+automatically only in Development, so in production you run them by hand. See
+[docs/setup.md](docs/setup.md#6-production) for the secret file format, migrations, crop seeding and reverse-proxy
+settings.
 
-## ⚠️ Important nuances
+## Troubleshooting
 
-> [!IMPORTANT]
-> **`DATABASE_RUNSEED=true`** in `.env` is required on the first start, otherwise the crop list is empty. The `sed`
-> command in the TL;DR sets it. Safe to leave on (it only inserts missing crops).
-
-> [!IMPORTANT]
-> **The OSM import (`osm-import`)** is optional but strongly recommended before a demo. Without it, nearest-water
-> distance is fetched in the background from the public Overpass API, which is often overloaded — the report then
-> says *"water data is still loading"*. The API uses the import immediately, no restart needed.
-
-> [!WARNING]
-> **Upstream limits:** Open-Meteo and Overpass rate-limit per IP. On a shared network (event Wi-Fi) the daily quota
-> can run out → `500` with a weather message. Switching networks (e.g. a phone hotspot) helps.
-
-- ⏱️ **Timing:** first analysis of a parcel 10–20 s (cold start up to < 30 s), repeats < 1 s.
-- 🚦 **API rate limit:** 10 analyses/min per client, 30/min per IP → `429` with `Retry-After`. Invalid requests don't count.
-- 📅 **Recent days:** the Open-Meteo archive lags ~5 days — dates in that window are flagged in the report.
-- 🛰️ **Satellite:** `satelliteStatus` = `OK` / `CLOUDY_FALLBACK` / `NO_DATA` (clouds) / `ERROR` (retried on a later request).
-- A `null` metric is **honest missing data**, explained in step 4 of the report.
-- 🔍 **Map:** GUGiK parcel boundaries render only from **zoom 17**; the EDO drought grid is ~5 km.
-- 🔌 Change ports in `.env`: `API_PORT`, `FRONTEND_PORT`, `POSTGRES_PORT`, `REDIS_PORT`, `PYTHON_SERVICE_PORT`.
-
-## 🩺 Troubleshooting
-
-| Symptom | Cause / fix |
+| Symptom | Cause and fix |
 |---|---|
-| Crop list is empty | `DATABASE_RUNSEED=true` missing in `.env` → fix it and `docker compose -f docker-compose.dev.yml up -d` |
-| "Water data is still loading" | OSM import not run and Overpass overloaded → run `osm-import` |
-| `429 Too Many Requests` | API rate limit — wait for `Retry-After` |
-| `500` with a weather message | Open-Meteo down or IP quota used up → retry later / from another network |
-| OSM import fails at step 1/4 (`404`, `502`, stalled) | Geofabrik hasn't published the newest extract; the script tries the previous 3 days. Retry later or pass `-e PBF_URL=https://download.geofabrik.de/europe/poland/poland-YYMMDD.osm.pbf` |
-| `slopeDeg: null` | GUGiK NMT timed out — the next analysis retries |
-| `satelliteStatus: ERROR` | Geo-Worker / Earth Search unavailable → `docker compose -f docker-compose.dev.yml logs python-service` |
-| API container stops after a code change | `dotnet watch` hot reload failed → `docker compose -f docker-compose.dev.yml restart api` |
-| Port already in use | Change it in `.env` (e.g. `FRONTEND_PORT=5174`) |
-| Start over with an empty DB | `down`, `docker volume rm wodoplon-dev_pgdata`, `up -d`, re-run the import |
+| The crop list is empty | `DATABASE_RUNSEED=true` is missing from `.env`. Set it and run `docker compose -f docker-compose.dev.yml up -d`. |
+| The report says water data is still loading | The OSM import hasn't been run and Overpass is slow. Run `osm-import`. |
+| `500` mentioning weather data | Open-Meteo is down or the daily quota for your IP is used up. Try again later or from another network. |
+| `429 Too Many Requests` | API rate limit. Wait for the time given in `Retry-After`. |
+| OSM import fails on step 1 | Geofabrik hasn't published today's extract yet. The script already tries the previous three days. Retry later or pass `-e PBF_URL=https://download.geofabrik.de/europe/poland/poland-YYMMDD.osm.pbf`. |
+| `slopeDeg` is `null` | The GUGiK elevation service timed out. The next analysis of the parcel retries it. |
+| `satelliteStatus` is `ERROR` | The geo-worker or Earth Search is unreachable. Check `docker compose -f docker-compose.dev.yml logs python-service`. |
+| The API container stops after a code change | `dotnet watch` crashed. Run `docker compose -f docker-compose.dev.yml restart api`. |
+| A port is already in use | Change it in `.env`, for example `FRONTEND_PORT=5174`. |
+| You want an empty database | Run `down`, then `docker volume rm wodoplon-dev_pgdata`, then `up -d`, and import OSM again. |
 
-More: [`docs/setup.md`](docs/setup.md#8-troubleshooting).
+More cases are covered in [docs/setup.md](docs/setup.md#8-troubleshooting).
 
-## 🧪 Tests
+## Data sources
 
-```bash
-dotnet test src/backend/WodoPlon.slnx                                  # backend (xUnit, mocked externals)
-cd src/python-service && pip install -r requirements-dev.txt && pytest  # Geo-Worker (no network)
-cd src/frontend && npm install && npm test                             # frontend (Vitest + Testing Library)
-cd src/frontend && npm run test:e2e                                    # Playwright E2E (live ULDK/GUGiK, /api stubbed)
-```
+All results are computed at request time from open data. Nothing is precomputed or hardcoded for real parcels.
 
-<details>
-<summary><b>What the tests verify</b></summary>
-
-- **Engine (xUnit):** FAO-56 `ETc` and 90-day balance math, 10-year median anomaly and drought-year counting,
-  `LOW`/`MODERATE`/`HIGH`/`CRITICAL` thresholds, all 4 retention triggers (weather deficit, sandy/low-humus soil,
-  slope runoff, ditch proximity), landscape-before-soil ordering, irrigation gating and dose clamping, request
-  coalescing, PL/EN texts, graceful degradation on upstream failures.
-- **Raster pipeline (pytest):** `/health` and `/extract-geo` contracts, slope calculation, Sentinel-2 cloud filtering,
-  NDVI/NDWI math, `NO_DATA`/`ERROR` handling.
-- **UI (Vitest + Playwright):** exact ULDK click coordinates, WKT `Polygon`/`MultiPolygon` parsing, land-use warning
-  flow (incl. TERYT urban fallback), strict 4-stage order, uncertainty breakdown, *„Brak danych”* rendering, mobile,
-  print/PDF, shareable links. Screenshots: `src/frontend/e2e-results/screens/` (`E2E_ALL_BROWSERS=1` adds Firefox/WebKit).
-
-</details>
-
-## 🏗️ Architecture
-
-```
-React (Leaflet) ──/api──► ASP.NET Core API ──► PostgreSQL 17 + PostGIS 3.5 (cache, crops, hydro, reports)
-                ──/uldk─►  (orchestrator)  ──► Redis 7 (rate limiting, HybridCache)
-                                           ──► Python Geo-Worker (terrain + Sentinel-2)
-                                           ──► ULDK, Open-Meteo, SoilGrids, Overpass (fallback)
-```
-
-| Component | Path | Stack | Role |
+| Data | Source | Resolution / scope | Licence |
 |---|---|---|---|
-| Frontend | `src/frontend/` | React 19, TypeScript, Vite, Tailwind 4, Leaflet | Map, parcel lookup, report view, share, print, PL/EN |
-| Backend API | `src/backend/` | .NET 10 Minimal API, EF Core, NetTopologySuite, CQRS | Orchestration, PostGIS cache, coalescing, FAO-56 engine, reports |
-| Geo-Worker | `src/python-service/` | Python 3.11, FastAPI, rasterio, shapely, pyproj | Slope from GUGiK NMT, NDVI/NDWI from Sentinel-2 COGs |
-| OSM importer | `scripts/import-osm-water.sh` | GDAL `ogr2ogr` | Monthly import of ~1.3M Polish water features |
-| Database | — | PostgreSQL 17 + PostGIS 3.5 | Crops, hydrography, parcel profiles, observations, reports |
-| Cache / limits | — | Redis 7 | Sliding-window rate limiting, HybridCache |
-| Proxy | `src/frontend/nginx.conf` | nginx (prod) | Static SPA, `/api` and `/uldk` proxy |
+| Crop parameters | FAO-56 | `Kc` by month, critical months, root depth | Public methodology |
+| Parcel boundaries | ULDK, GUGiK | Polygon, area, voivodeship | GUGiK open data |
+| Slope | Geoportal NMT WCS, GUGiK | 1 m elevation model | GUGiK open data |
+| Soil | ISRIC SoilGrids v2.0 | Sand, clay, silt and organic carbon at 0–30 cm, 250 m | CC BY 4.0 |
+| Weather | Open-Meteo Historical Weather API | Daily precipitation, ET₀ and max temperature over ten years | CC BY 4.0 |
+| Vegetation and moisture | Sentinel-2 L2A via Earth Search STAC | NDVI and NDWI with cloud masking | Copernicus open data |
+| Hydrography | OpenStreetMap via Geofabrik, Overpass as fallback | Rivers, streams, canals, ditches, lakes, wetlands | ODbL 1.0 |
 
-**Pipeline:** (1) static parcel profile, computed once and cached (boundary, soil/AWC, nearest water, slope) →
-(2) dynamic observation per `(parcel, date)`: 10-year weather + Sentinel-2 in parallel, concurrent first requests
-share one fetch → (3) deterministic `AnalysisEngine` (FAO-56 balance vs. 10-year local median, `CRITICAL < −180 mm`,
-dry spells, NDWI, soil, slope, ditches) → (4) PL/EN template report with sources and confidence.
+The map also uses some services only for display, never for the calculations: OSM tiles, Geoportal orthophoto, the
+KIEG cadastral WMS (also used to check land use), Copernicus EDO drought tiles, Overpass for nearby fields and
+ditches, and Open-Meteo elevation for runoff arrows.
 
-If the Geo-Worker is down, analysis still runs with satellite marked `ERROR`; if SoilGrids is down, medium-loam
-defaults are used and disclosed.
+Indices: `NDVI = (B08 − B04) / (B08 + B04)`, `NDWI = (B08 − B11) / (B08 + B11)` (Gao), crop evapotranspiration
+`ETc = ET₀ × Kc`.
 
-Docs: [API & algorithm](docs/api.md) · [data model](docs/data.md) · [setup](docs/setup.md) · [implementation plan](docs/plan/00-overview.md)
+## Limitations
 
-## 🛰️ Data sources
+- SoilGrids has a 250 m grid and misses variation within a field. When it has no data, medium loam (130 mm/m
+  available water) is assumed, and the report says so.
+- Long cloudy periods mean no usable Sentinel-2 scene. The assessment then relies on the other inputs and confidence
+  goes down.
+- The Open-Meteo archive lags about five days behind and uses a 9–11 km grid. Dates inside that lag are flagged.
+- There is no groundwater or sensor data, and water-permit requirements are not checked.
+- Ditch detection (within 1000 m) is only as good as OSM coverage in the area.
+- The crop model has five crops with monthly `Kc` stages. Custom sowing dates are not supported.
+- Some counties don't publish land-use classes through KIEG. In that case the land-use check falls back to OSM
+  farmland and TERYT, or reports the plot as not verified. It never blocks the analysis.
+- The confidence indicator reflects how complete the input data is. It is not a statistical confidence interval.
 
-All diagnoses and recommendations are **computed at runtime** from open data — nothing is hardcoded for real parcels.
+## Documentation
 
-| Data | Source | Scope | Freshness | Licence |
-|---|---|---|---|---|
-| Crop parameters | FAO-56 | `Kc`, critical months, root depth, 5 crops | Seeded at startup | Public methodology |
-| Hydrography | OSM via Geofabrik (`poland-latest.osm.pbf`) | Rivers, streams, canals, ditches, lakes, wetlands (~1.3M) | Preloaded, monthly; Overpass fallback | ODbL 1.0 |
-| Parcel boundaries | ULDK GUGiK | Polygon, area, voivodeship | Live, then cached | GUGiK open data |
-| Slope | Geoportal NMT WCS | 1 m DTM: mean/max slope, % area `> 3°` | Live, then cached; retried on failure | GUGiK open data |
-| Soil | ISRIC SoilGrids v2.0 | 0–30 cm sand/clay/silt/SOC, 250 m | Live, then cached | CC BY 4.0 |
-| Weather | Open-Meteo Archive | Daily `P`, `ET₀`, `Tmax`, 90-day windows × 10 years | Live per `(parcel, date)`, cached | CC BY 4.0 |
-| Satellite | Sentinel-2 L2A (Earth Search STAC) | B04/B08/B11/SCL, `±15 days` → NDVI, NDWI | Live, cached with scene date & cloud % | Copernicus open |
+- [docs/setup.md](docs/setup.md): installation, OSM import, production, troubleshooting
+- [docs/api.md](docs/api.md): API contract, data flow and the algorithm in detail
+- [docs/api_asp_net_core_python_fastapi.md](docs/api_asp_net_core_python_fastapi.md): contracts between the frontend, API and geo-worker
+- [docs/data.md](docs/data.md): database schema and caching strategy
+- [docs/plan/00-overview.md](docs/plan/00-overview.md): implementation plan
 
-<details>
-<summary><b>Browser-only map services</b> (visual context, never used in calculations)</summary>
+## License
 
-| Purpose | Service | Licence |
-|---|---|---|
-| Parcel outline | ULDK GUGiK (via `/uldk` proxy) | GUGiK open data |
-| Land-use check | GUGiK KIEG WMS `GetFeatureInfo` (EGiB) | GUGiK open data |
-| Fields & ditches nearby | OSM Overpass API | ODbL 1.0 |
-| Runoff arrows | Open-Meteo Elevation (Copernicus DEM 90 m) | CC BY 4.0 |
-| Base maps & overlays | OSM tiles, Geoportal orthophoto, KIEG parcels, Copernicus EDO (`cdiad`) | ODbL / GUGiK / Copernicus |
-
-On phones the map credits sit behind an "i" button; on desktop they are always visible.
-
-</details>
-
-## 🚧 Limitations
-
-- **SoilGrids 250 m** misses within-field variability; fallback is medium loam (`130 mm/m` AWC), disclosed in step 4.
-- **Clouds** across the `±15-day` window → `NO_DATA`; assessment relies on other inputs with lower confidence.
-- **Open-Meteo** ~5-day archive lag, ~9–11 km grid.
-- **No groundwater telemetry or water-law permit checks.**
-- **OSM completeness** limits ditch detection (`≤ 1000 m`).
-- **Crop model:** 5 crops, monthly FAO-56 `Kc` stages, no custom sowing dates.
-- **EGiB coverage:** some counties don't expose EGiB classes; the UI falls back to OSM farmland / TERYT or says "not verified", never blocks.
-- **Public Overpass / EDO** can be slow; overlays degrade with a status banner.
-- *„Wiarygodność oceny”* measures input completeness, not a statistical confidence interval.
-
-## 🔐 Scalability & security
-
-- **Multi-tier PostGIS caching** + pre-imported hydrography: static profiles cached indefinitely, observations per
-  `(parcel, date)`, reports stored by UUID.
-- **Coalescing, rate limits, timeouts:** HybridCache dedupes concurrent first requests; Redis sliding window after
-  validation; strict outbound timeouts; failed terrain/satellite lookups retry automatically.
-- **Graceful degradation:** optional upstream failures never produce HTTP 500.
-- **Nationwide path:** pre-load BDOT10k / Hydroportal / EGiB / NMT / IUNG-PIB layers, scheduled ingestion of weather
-  grids and Sentinel-2 composites (target `< 200 ms`), stateless API + Geo-Worker behind a load balancer, CDN, read replicas.
-- **Cost:** prototype runs at **zero paid API cost**; national production ~**EUR 200–600 / month** infrastructure,
-  plus Open-Meteo commercial plan or self-hosted ERA5/IMGW-PIB, and CDSE credentials for satellite ingestion.
-- **Security:** zero PII (public TERYT IDs, random report UUIDs), FluentValidation, explicit CORS (`Cors__WebOrigin`),
-  `X-Forwarded-For` trusted only from private networks (`ForwardedHeaders__KnownNetworks`), Geo-Worker internal-only,
-  credentials via Docker secrets (`/run/secrets`, never in git).
-
-## 🤖 Use of AI
-
-- **At runtime:** none. Calculations, recommendations and PL/EN texts are deterministic.
-- **During development:** Claude Code (Anthropic) and Antigravity (Google) helped with the frontend UI, test suites,
-  hardening and documentation. All generated code and docs were reviewed, run and verified by the team.
-
-## 📦 Components & licences
-
-<details>
-<summary><b>Backend (.NET 10 / NuGet)</b></summary>
-
-| Component | Licence | Use |
-|---|---|---|
-| .NET 10 / ASP.NET Core / EF Core / OpenAPI | MIT | Web API, ORM, OpenAPI |
-| Npgsql / Npgsql.EntityFrameworkCore.PostgreSQL | PostgreSQL License | PostgreSQL + PostGIS driver |
-| NetTopologySuite / NetTopologySuite.IO.GeoJSON4STJ | BSD-3-Clause | Geometries & GeoJSON |
-| FluentValidation | Apache-2.0 | Request & config validation |
-| Microsoft.Extensions.Caching.Hybrid / StackExchangeRedis | MIT | Coalescing & caching |
-| StackExchange.Redis | MIT | Redis client |
-| xUnit / NSubstitute / coverlet.collector | Apache-2.0 / BSD-3-Clause / MIT | Tests only |
-| FluentAssertions (v8) | Xceed Community License (free non-commercial / OSS) | Tests only |
-
-</details>
-
-<details>
-<summary><b>Geo-Worker (Python 3.11 / PyPI)</b></summary>
-
-| Component | Licence | Use |
-|---|---|---|
-| FastAPI / pydantic-settings | MIT | HTTP API & config |
-| Uvicorn | BSD-3-Clause | ASGI server |
-| httpx | BSD-3-Clause | Async HTTP for WCS & STAC |
-| NumPy | BSD-3-Clause | Raster & index math |
-| rasterio (GDAL / PROJ) | BSD-3-Clause (GDAL/PROJ: MIT) | COG window reads |
-| Shapely | BSD-3-Clause | Polygon ops |
-| pyproj | MIT | CRS reprojection (EPSG:4326 ↔ 2180 / UTM) |
-| pytest | MIT | Tests only |
-
-</details>
-
-<details>
-<summary><b>Frontend (Node 22 / npm)</b></summary>
-
-| Component | Licence | Use |
-|---|---|---|
-| React, React DOM, React Router | MIT | UI, routing |
-| Leaflet | BSD-2-Clause | Map |
-| react-leaflet, @react-leaflet/core | Hippocratic License 2.1 | React bindings (permissive with human-rights conditions; not OSI-approved) |
-| lucide-react | ISC | Icons |
-| Tailwind CSS, Vite, TypeScript | MIT / MIT / Apache-2.0 | Build & styling |
-| Plus Jakarta Sans, JetBrains Mono | SIL OFL 1.1 | Fonts |
-| Vitest, Testing Library, Playwright | MIT / MIT / Apache-2.0 | Tests only |
-
-</details>
-
-<details>
-<summary><b>Infrastructure</b></summary>
-
-| Component | Licence | Role |
-|---|---|---|
-| PostgreSQL 17 | PostgreSQL License | Database |
-| PostGIS 3.5 | GPL-2.0+ | Spatial extension (separate container) |
-| Redis 7 | RSALv2 / SSPLv1 | Rate limiting & cache (separate container) |
-| GDAL (`ghcr.io/osgeo/gdal`) | MIT | `osm-import` job |
-| nginx | BSD-2-Clause | Production static server & proxy |
-
-</details>
-
-**Models:** FAO-56 `ETc = ET₀ × Kc`; Sentinel-2 `NDVI = (B08 − B04)/(B08 + B04)`, Gao `NDWI = (B08 − B11)/(B08 + B11)`
-with SCL cloud mask; deterministic rule-based engine — no ML or LLM inference at runtime.
-
----
-
-<div align="center">
-
-**Licencja / License:** Apache 2.0 — [LICENSE](LICENSE)
-
-Made with 💧 for Polish farmers · HackNation 2026
-
-</div>
+Apache License 2.0, see [LICENSE](LICENSE). Data from third-party sources keeps its own licence (see
+[Data sources](#data-sources)). OpenStreetMap data requires attribution under the ODbL.
