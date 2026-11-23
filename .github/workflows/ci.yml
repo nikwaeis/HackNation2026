@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Unit and contract tests only: they mock every external service. The Playwright suite (src/frontend/e2e) talks to
+# live ULDK, GUGiK and Copernicus servers and is run by hand: cd src/frontend && npm run test:e2e
+jobs:
+  backend:
+    name: Backend (.NET)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet test src/backend/WodoPlon.slnx --configuration Release
+
+  geo-worker:
+    name: Geo-worker (Python)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/python-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: src/python-service/requirements*.txt
+      - run: pip install -r requirements-dev.txt
+      - run: pytest
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: src/frontend/package-lock.json
+      - run: npm ci
+      - run: npm test
+      # type check (tsc -b) and production bundle
+      - run: npm run build
