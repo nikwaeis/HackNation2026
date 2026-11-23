@@ -45,7 +45,7 @@ The system combines **5 mandatory categories** of open data at request time (no 
 | :--- | :--- | :--- | :--- | :--- |
 | **1. Spatial (boundaries and terrain)** | **ULDK GUGiK** (`uldk.gugik.gov.pl`) and **Geoportal.gov.pl** (NMT WCS) | ASP.NET (boundaries) + Python (terrain) | Parcel polygon, voivodeship, area (ha), mean and max slope (°), share of area with slope > 3°. | Static cache in PostGIS (forever) |
 | **2. Weather** | **Open-Meteo Archive API** (`archive-api.open-meteo.com`) | ASP.NET Core | Daily precipitation (P, mm) and reference evapotranspiration (ET₀, mm) for the 90-day window and the same window in each of the **10 previous years**. | Live on first request, then cached per `(dzialka_id, target_date)` |
-| **3. Satellite** | **Sentinel-2 L2A, Earth Search** (`earth-search.aws.element84.com/v1`) | Python FastAPI | Bands B04 (red), B08 (NIR), B11 (SWIR1) and the SCL cloud mask within ±15 days of `targetDate`; mean **NDVI** and **NDWI**. | Live on first request, then cached per `(dzialka_id, target_date)`; failed fetches are retried |
+| **3. Satellite** | **Sentinel-2 L2A, Earth Search** (`earth-search.aws.element84.com/v1`) | Python FastAPI | Bands B04 (red), B08 (NIR), B11 (SWIR1) and the SCL cloud mask from the 30 days before `targetDate`; mean **NDVI** and **NDWI**. | Live on first request, then cached per `(dzialka_id, target_date)`; failed fetches are retried |
 | **4. Soil** | **ISRIC SoilGrids v2.0** (`rest.isric.org/soilgrids/v2.0`) | ASP.NET Core | Sand, clay, silt and soil organic carbon (SOC, g/kg) in the 0–30 cm layer. | Static cache in PostGIS (forever) |
 | **5. Hydrology** | **OpenStreetMap** (Geofabrik Poland extract imported into PostGIS; Overpass API as fallback) + **Copernicus EDO WMS** | PostGIS + frontend | Distance (`ST_Distance`, m) to the nearest river, drainage ditch, lake or wetland; EDO drought background layer on the map. | Monthly import into PostGIS + live WMS on the map |
 
@@ -64,6 +64,7 @@ All endpoints are under `/api`. Errors use RFC 9110 problem details; messages fo
 | `GET` | `/api/crops` | 60/min | Crop catalogue |
 | `POST` | `/api/analyze` | 10/min per client fingerprint, 30/min per IP | Analyze a parcel |
 | `GET` | `/api/reports/{reportUuid}` | 60/min | Saved report (shareable link) |
+| `GET` | `/api/map/context` | 120/min | Ditches and streams for the visible map area (section 3.5) |
 
 Exceeding a limit returns `429 Too Many Requests` with a `Retry-After` header. Invalid requests (`400` from validation)
 do not count against the limit.
@@ -211,6 +212,25 @@ section 2. In short: the request carries `dzialka_id`, `target_date`, `include_t
 response has a `terrain` section (slope metrics, `null` when `include_terrain=false`) and a `satellite` section (NDVI,
 NDWI, scene date, cloud cover, status). `include_terrain` is `false` when the terrain is already cached for the parcel.
 
+### 3.5. Map overlay: ditches and streams
+`GET /api/map/context?south=53.10&west=19.84&north=53.14&east=19.98`
+
+Waterway lines for the visible map area from the local OSM import in `hydro_features` (milliseconds, no rate limits),
+so the browser does not have to query the public Overpass API for them. The box is clamped to Poland (latitude
+48.5–55.2, longitude 13.8–24.5) and may span at most 0.5° each way; a box entirely outside Poland or too large is a
+`400`.
+
+```json
+{
+  "water": [{ "id": 4567, "kind": "ditch", "name": null, "line": [[53.1201, 19.8601], [53.1215, 19.8644]] }],
+  "waterSource": "osm-import"
+}
+```
+
+Points are `[lat, lon]`; `kind` is `river` (rivers, streams, canals) or `ditch` (ditches, drains). Before the import has
+run, the answer is `{"water": [], "waterSource": null}` and the map asks Overpass itself. Farmland that can be picked on
+the map (OSM `landuse` farmland, meadow, orchard, vineyard, plant nursery) always comes from Overpass in the browser.
+
 ---
 
 ## 4. Algorithm
@@ -260,9 +280,12 @@ Weather, soil and satellite indicators are combined for the 90 days before `targ
    * **`HIGH`:** $\Delta < -50$ mm OR ($\Delta < -35$ mm on sandy soil, $\text{sand\_pct} > 65\%$) OR $WB_{90} < -180$ mm
      without confirmation.
    * **`MODERATE`:** $\Delta < -20$ mm OR `historicalDroughtYears` $\ge 5$ OR $\text{NDWI} < -0.10$.
-   * **`LOW`:** otherwise.
+   * **`LOW`:** otherwise, and always when $WB_{90} \ge 0$: rain covered the crop's need, so a surplus smaller than
+     the usual one is not a drought.
    * With no past years in the archive, absolute thresholds are used: `HIGH` at $WB_{90} < -110$ mm (sand: $< -90$),
      `MODERATE` at $WB_{90} < -40$ mm.
+   * **Outside the growing season** (November–March) the level is capped at `MODERATE` and step 4 says why: crops do
+     not take up water then, so a dry window means a smaller soil water reserve before spring, not plant stress.
 
 ### Step 2. Causes and retention recommendations (priority)
 Recommendations come only from triggered causes (deterministic rule engine, texts from resource templates, no LLM):
@@ -290,7 +313,8 @@ the plant cover.
 ### Step 3. Irrigation advice (last resort)
 Irrigation is recommended (`isRecommended = true`) **only when all three conditions hold**:
 1. The risk level is `HIGH` or `CRITICAL`.
-2. `targetDate` falls in the crop's critical months (`criticalMonths`) or $\text{NDWI} < -0.15$.
+2. `targetDate` falls in the crop's critical months (`criticalMonths`), or it falls in the growing season
+   (April–October) and $\text{NDWI} < -0.15$. A low NDWI over a dormant winter field or bare soil is not water stress.
 3. Retention measures cannot offset the current deficit right away (always true: they work over seasons).
 
 **Dose:**
@@ -302,7 +326,7 @@ with an explanation that keeping soil water comes first.
 The last block of the report always lists:
 * the APIs used and the data dates (including the actual Sentinel-2 scene date and cloud cover, and the OSM data date);
 * dynamic limitations, for example:
-  * `NO_DATA` (no cloud-free scene within ±15 days): the assessment uses weather and soil models without satellite correction;
+  * `NO_DATA` (no cloud-free scene in the 30 days before `targetDate`): the assessment uses weather and soil models without satellite correction;
   * `ERROR` (satellite service unavailable): same, and the data will be fetched again on the next analysis;
   * missing soil, terrain or water data, the weather archive delay for the last days;
   * the 250 m resolution of SoilGrids and the absence of groundwater measurements on the parcel.

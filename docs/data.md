@@ -106,7 +106,7 @@ Results of the live fetch for one `(parcel, analysis date)` pair.
   * `window_months` (`jsonb`) — P and ET₀ per calendar month inside the 90-day window, for the target year and each of
     the 10 past years (`[{YearsBack, Month, PrecipMm, Et0Mm}]`). Kc depends only on the month, so ETc, the 10-year median
     balance and `historicalDroughtYears` are computed for any crop without a new Open-Meteo request.
-* **Satellite (Sentinel-2 L2A Earth Search, ±15 days):**
+* **Satellite (Sentinel-2 L2A Earth Search, 30 days before the target date):**
   * `ndvi_mean`, `ndwi_mean` (`numeric(5,4)`, nullable) — mean indices over the polygon.
   * `satellite_scene_date` (`date`, nullable) — date of the scene used.
   * `cloud_cover_pct` (`numeric(5,2)`, nullable) — cloud cover over the parcel.

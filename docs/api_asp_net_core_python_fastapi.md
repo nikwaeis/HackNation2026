@@ -76,7 +76,7 @@ The Python service is reachable only inside the Docker network (`http://python-s
 the API asks again on the next analysis).
 
 **`satellite.status`:**
-* `OK` — a scene with < 20% cloud cover over the polygon within ±15 days before `target_date` (never after it).
+* `OK` — a scene with < 20% cloud cover over the polygon within the 30 days before `target_date` (never after it).
 * `CLOUDY_FALLBACK` — only scenes with 20–50% cloud cover; the least cloudy one is used and ASP.NET adds a warning to
   `limitationsPl`.
 * `NO_DATA` — the field was covered by clouds for the whole window or the date is outside the archive (`ndvi_mean`,

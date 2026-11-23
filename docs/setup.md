@@ -40,14 +40,26 @@ answers. Check the log once: `docker compose -f docker-compose.dev.yml logs api 
 
 Ports can be changed in `.env` (`API_PORT`, `FRONTEND_PORT`, `POSTGRES_PORT`, `REDIS_PORT`, `PYTHON_SERVICE_PORT`).
 
-## 3. Warm up the database: Polish water network (OSM import)
+## 3. Polish water network (OSM import)
 
-The report uses the distance to the nearest river, ditch, lake or wetland. These come from OpenStreetMap. Without a
-local copy the API asks the public Overpass API in the background, which is often overloaded: the first report of a
-parcel then says *"water data is still loading"*. **Run the import once before a demo**, and refresh it monthly:
+The report uses the distance to the nearest river, ditch, lake or wetland, and the map draws ditches and streams.
+These come from OpenStreetMap. Without a local copy the API asks the public Overpass API, which is often overloaded:
+the first report of a parcel then says *"water data is still loading"*.
+
+`docker compose up` starts the `osm-import` service automatically. It waits until the API has created the tables,
+imports the data when it is missing or older than 30 days, and exits; the rest of the stack works meanwhile (with the
+Overpass fallback). Follow it with `docker compose -f docker-compose.dev.yml logs -f osm-import`.
+
+| `OSM_IMPORT` in `.env` | Behaviour |
+|---|---|
+| `auto` (default) | Import when missing or older than `OSM_IMPORT_MAX_AGE_DAYS` (30) |
+| `always` | Import on every start |
+| `off` | Never import (slow or metered connection); water comes from Overpass per parcel |
+
+Refresh by hand at any time:
 
 ```bash
-docker compose -f docker-compose.dev.yml run --rm osm-import
+docker compose -f docker-compose.dev.yml run --rm -e OSM_IMPORT=always osm-import
 ```
 
 What it does (`scripts/import-osm-water.sh`, GDAL container):
@@ -102,7 +114,19 @@ dotnet test src/backend/WodoPlon.slnx
 cd src/python-service
 pip install -r requirements-dev.txt
 pytest
+
+# Frontend unit tests and production build (includes the type check)
+cd src/frontend
+npm ci
+npm test
+npm run build
+
+# Frontend end-to-end tests (Playwright, Chrome; live ULDK / GUGiK / Copernicus, /api partly stubbed)
+npm run test:e2e
 ```
+
+GitHub Actions (`.github/workflows/ci.yml`) runs the backend, Geo-Worker and frontend unit tests and the frontend build
+on every push to `main` and every pull request. The end-to-end suite depends on live public services and is run by hand.
 
 ## 6. Production
 
@@ -132,19 +156,20 @@ dotnet ef migrations script --idempotent --project src/backend/WodoPlon.Api -o m
 docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T postgres \
   sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1' < migrate.sql
 
-# 4. Warm up the water network (once, then monthly)
-docker compose --env-file .env.prod -f docker-compose.prod.yml run --rm osm-import
-
-# 5. Seed crops on the first start: add Database__RunSeed=true to .env.prod, then start everything
+# 4. Seed crops on the first start: add Database__RunSeed=true to .env.prod, then start everything
 docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
 ```
+
+`up` also starts the OSM water import (section 3): it waits for the migrated tables, imports when the data is missing
+or older than 30 days, and exits.
 
 The frontend is served by nginx on port `80` and proxies `/api` to the backend. The Geo-Worker is internal only.
 The API trusts `X-Forwarded-For` only from loopback and private networks (Docker, LAN). Behind another proxy (e.g. a
 cloud load balancer with a public address), list every trusted network in `.env.prod` — the list replaces the default:
 `ForwardedHeaders__KnownNetworks__0=172.16.0.0/12`, `ForwardedHeaders__KnownNetworks__1=<proxy CIDR>`, …
 
-Monthly refresh (cron or by hand): `docker compose --env-file .env.prod -f docker-compose.prod.yml run --rm osm-import`.
+Each `up` refreshes the water network when it is older than 30 days. To refresh without a restart (cron or by hand):
+`docker compose --env-file .env.prod -f docker-compose.prod.yml run --rm -e OSM_IMPORT=always osm-import`.
 
 ## 7. External services
 
@@ -155,17 +180,18 @@ Monthly refresh (cron or by hand): `docker compose --env-file .env.prod -f docke
 | ISRIC SoilGrids | Soil texture | Average soil assumed, stated in the report |
 | Geoportal NMT WCS | Slope | Runoff risk not assessed, retried on the next analysis |
 | Sentinel-2 / Earth Search | NDVI, NDWI | Assessment without satellite correction (`NO_DATA` / `ERROR`) |
-| Geofabrik (import) / Overpass (fallback) | Nearest water | "Water data still loading", retried |
+| Geofabrik (import) / Overpass (fallback) | Nearest water, ditches on the map | "Water data still loading", retried |
+| Overpass (in the browser) | Fields that can be picked on the map | The map says fields could not be loaded; typing the parcel ID still works |
 
 ## 8. Troubleshooting
 
 | Symptom | Cause / fix |
 |---|---|
-| Report says water data is still loading | The OSM import was not run (section 3) and Overpass is overloaded. Run the import. |
+| Report says water data is still loading | The OSM import has not finished yet or is switched off (section 3), and Overpass is overloaded. Check `docker compose -f docker-compose.dev.yml logs osm-import`. |
 | `429 Too Many Requests` | API rate limit: 10 analyses/min per client, 30/min per IP. Wait for `Retry-After`. Invalid requests do not count. |
-| OSM import fails at step 1/4 (`404`, `502`, stalled download) | Geofabrik has not published the newest extract yet. The script then tries the extracts of the last 3 days; if all fail, run it again later or pass one explicitly: `run --rm -e PBF_URL=https://download.geofabrik.de/europe/poland/poland-YYMMDD.osm.pbf osm-import`. |
+| OSM import fails at step 1/4 (`404`, `502`, stalled download) | Geofabrik has not published the newest extract yet. The script then tries the extracts of the last 3 days; if all fail, run it again later or pass one explicitly: `run --rm -e OSM_IMPORT=always -e PBF_URL=https://download.geofabrik.de/europe/poland/poland-YYMMDD.osm.pbf osm-import`. |
 | `500` with a weather message | Open-Meteo is down or the daily per-IP quota is used up (shared IPs at events). Try later or from another network. |
 | `slopeDeg` is `null` | GUGiK NMT did not answer in time; the next analysis of the parcel asks again. |
 | `satelliteStatus: ERROR` | Geo-Worker or Earth Search unavailable; check `docker compose logs python-service`. The next request (after ~1 min) retries. |
 | API container stops after a code change in dev | `dotnet watch` hot reload failed; `docker compose -f docker-compose.dev.yml restart api`. |
-| Start over with an empty database | `docker compose -f docker-compose.dev.yml down`, then `docker volume rm wodoplon-dev_pgdata`, then `up -d` and the import again. `down -v` also deletes the 2.1 GB OSM download. |
+| Start over with an empty database | `docker compose -f docker-compose.dev.yml down`, then `docker volume rm wodoplon-dev_pgdata`, then `up -d` (the import runs again by itself). `down -v` also deletes the 2.1 GB OSM download. |

@@ -63,9 +63,12 @@ The report always follows the same four steps:
    strips), then soil measures (mulching, crop residues, cover crops, reduced tillage). Each one is tied to a
    specific finding for the parcel.
 3. **Irrigation, as a last resort.** Suggested only at `HIGH` or `CRITICAL` risk during the crop's critical months
-   (or when NDWI is below −0.15), with a dose of 15–35 mm (150–350 m³/ha).
+   (or, in the growing season, when NDWI is below −0.15), with a dose of 15–35 mm (150–350 m³/ha).
 4. **Sources and limitations.** Every data source with dates, satellite scene dates and cloud cover. Data that could
    not be fetched is reported as missing rather than estimated.
+
+Outside the growing season (November–March) crops take up no water, so the risk level is capped at moderate and the
+report explains that it describes the soil water reserve before spring rather than plant stress.
 
 Reports get a permanent link (`/report/{reportUuid}`) and can be printed or saved as PDF. The map offers OSM,
 Geoportal orthophoto, cadastral boundaries, the Copernicus EDO drought index, nearby ditches and fields, and runoff
@@ -95,17 +98,20 @@ Open http://localhost:5173. To try it, enter parcel `041509_2.0004.437/3`, choos
 set the date to `2026-06-15` and run the analysis. The first analysis of a parcel takes 10–20 seconds because the
 data is fetched live from several services. After that it is cached and comes back in under a second.
 
-### Importing the water network (recommended)
+### The water network import
 
-Distance to the nearest river, ditch or lake is looked up in a local copy of the OSM water network for Poland. Until
-that copy exists, the API falls back to the public Overpass API in the background, which is often slow, and the
-report will say that water data is still loading. The import downloads about 2.1 GB and takes around ten minutes:
+Distance to the nearest river, ditch or lake, and the ditches drawn on the map, come from a local copy of the OSM
+water network for Poland. `docker compose up` starts the `osm-import` service, which downloads about 2.1 GB on the
+first run, imports it in around ten minutes and exits. Later starts skip it until the data is 30 days old. The app
+works in the meantime: the API falls back to the public Overpass API, which is often slow, and a report may say that
+water data is still loading.
 
 ```bash
-docker compose -f docker-compose.dev.yml run --rm osm-import
+docker compose -f docker-compose.dev.yml logs -f osm-import                       # follow the import
+docker compose -f docker-compose.dev.yml run --rm -e OSM_IMPORT=always osm-import  # refresh now
 ```
 
-The API picks up the imported data immediately. Re-run the import once a month to refresh it.
+On a slow or metered connection set `OSM_IMPORT=off` in `.env` to skip it.
 
 ### Requirements
 
@@ -142,7 +148,7 @@ React + Leaflet ──/api───► ASP.NET Core API ──► PostgreSQL 17 
 | Frontend | `src/frontend/` | React 19, TypeScript, Vite, Tailwind CSS 4, Leaflet | Map, parcel lookup, report view, sharing, printing, PL/EN |
 | API | `src/backend/` | .NET 10 minimal API, EF Core, NetTopologySuite | Orchestration, caching, request coalescing, analysis engine, reports |
 | Geo-worker | `src/python-service/` | Python 3.11, FastAPI, rasterio, shapely, pyproj | Slope from the GUGiK elevation model, NDVI/NDWI from Sentinel-2 |
-| OSM importer | `scripts/import-osm-water.sh` | GDAL `ogr2ogr` | Loads about 1.3 million Polish water features into PostGIS |
+| OSM importer | `scripts/import-osm-water.sh` | GDAL `ogr2ogr` | Loads about 1.3 million Polish water features into PostGIS on `docker compose up` |
 | Database | | PostgreSQL 17 + PostGIS 3.5 | Crops, hydrography, parcel profiles, observations, saved reports |
 | Cache | | Redis 7 | Rate limiting and HybridCache |
 
@@ -155,8 +161,12 @@ An analysis runs in four stages:
    once, they share a single fetch.
 3. **Assessment.** The engine compares the current balance with the parcel's own ten-year median, then adjusts the
    result for dry spells, NDWI, sandy soil and drought history. The outcome is one of four levels: `LOW`,
-   `MODERATE`, `HIGH`, `CRITICAL`.
+   `MODERATE`, `HIGH`, `CRITICAL`. A balance at or above zero is always `LOW`, and outside the growing season the
+   level stops at `MODERATE`.
 4. **Report.** Text is rendered from Polish and English templates, with sources and limitations attached.
+
+Ditches and streams on the map also come from the API, out of the local OSM import. Fields that can be picked on the
+map are loaded by the browser from the public Overpass API.
 
 If an optional source fails, the analysis still completes. For example, if the geo-worker is down, the satellite
 status is reported as `ERROR`. If SoilGrids is unavailable, medium-loam defaults are used. Either way, the report
@@ -170,6 +180,7 @@ says so.
 | `GET` | `/api/crops` | Supported crops with their FAO-56 coefficients |
 | `POST` | `/api/analyze` | Run an analysis. Body: `dzialkaId` or `lat` + `lon`, plus `cropId` and `targetDate` |
 | `GET` | `/api/reports/{reportUuid}` | Fetch a saved report |
+| `GET` | `/api/map/context` | Ditches and streams for a map area from the OSM import: `south`, `west`, `north`, `east` in degrees |
 
 Crop IDs are `winter_wheat`, `maize`, `rapeseed`, `sugar_beet` and `potato`. Send `Accept-Language: en` to get the
 report in English (Polish is the default).
@@ -194,7 +205,8 @@ why. The full request and response schema is in [docs/api.md](docs/api.md).
 ## Development
 
 In the dev compose setup, source folders are mounted into the containers, so the API, frontend and geo-worker reload
-on changes.
+on changes (they poll for file changes, which also works on Windows and macOS). The frontend container reinstalls its
+packages by itself when `package-lock.json` changes.
 
 ```bash
 docker compose -f docker-compose.dev.yml logs -f api   # follow API logs
@@ -212,14 +224,14 @@ npm run dev
 
 The dev server proxies `/api` to `http://localhost:5254`. You can point it elsewhere with `VITE_API_PROXY_TARGET`.
 When no backend is reachable, the "Zobacz przykładowy raport" button opens a demo report that is clearly marked as
-such.
+such, and the map asks the public Overpass API for ditches as well as fields.
 
 ### Tests
 
 ```bash
 dotnet test src/backend/WodoPlon.slnx                                    # API and engine (xUnit)
 cd src/python-service && pip install -r requirements-dev.txt && pytest   # geo-worker, no network needed
-cd src/frontend && npm install && npm test                               # frontend unit tests (Vitest)
+cd src/frontend && npm ci && npm test && npm run build                   # frontend unit tests (Vitest), type check, build
 cd src/frontend && npm run test:e2e                                      # end-to-end (Playwright)
 ```
 
@@ -227,6 +239,10 @@ The backend tests cover the water-balance math, risk thresholds, retention and i
 localized texts and behaviour when upstream services fail. Python tests cover the geo-worker contract, slope
 calculation, cloud masking and NDVI/NDWI. The Playwright suite uses the live ULDK and GUGiK services with a stubbed
 `/api`. Set `E2E_ALL_BROWSERS=1` to run it in Firefox and WebKit as well.
+
+GitHub Actions ([ci.yml](.github/workflows/ci.yml)) runs the backend, geo-worker and frontend unit tests and the
+frontend build on every push to `main` and every pull request. The Playwright suite depends on live public services
+and is run by hand.
 
 ## Production deployment
 
@@ -247,15 +263,15 @@ settings.
 | Symptom | Cause and fix |
 |---|---|
 | The crop list is empty | `DATABASE_RUNSEED=true` is missing from `.env`. Set it and run `docker compose -f docker-compose.dev.yml up -d`. |
-| The report says water data is still loading | The OSM import hasn't been run and Overpass is slow. Run `osm-import`. |
+| The report says water data is still loading | The OSM import is still running or is switched off, and Overpass is slow. Check `docker compose -f docker-compose.dev.yml logs osm-import`. |
 | `500` mentioning weather data | Open-Meteo is down or the daily quota for your IP is used up. Try again later or from another network. |
 | `429 Too Many Requests` | API rate limit. Wait for the time given in `Retry-After`. |
-| OSM import fails on step 1 | Geofabrik hasn't published today's extract yet. The script already tries the previous three days. Retry later or pass `-e PBF_URL=https://download.geofabrik.de/europe/poland/poland-YYMMDD.osm.pbf`. |
+| OSM import fails on step 1 | Geofabrik hasn't published today's extract yet. The script already tries the previous three days. Retry later with `run --rm -e OSM_IMPORT=always osm-import`, or add `-e PBF_URL=https://download.geofabrik.de/europe/poland/poland-YYMMDD.osm.pbf`. |
 | `slopeDeg` is `null` | The GUGiK elevation service timed out. The next analysis of the parcel retries it. |
 | `satelliteStatus` is `ERROR` | The geo-worker or Earth Search is unreachable. Check `docker compose -f docker-compose.dev.yml logs python-service`. |
 | The API container stops after a code change | `dotnet watch` crashed. Run `docker compose -f docker-compose.dev.yml restart api`. |
 | A port is already in use | Change it in `.env`, for example `FRONTEND_PORT=5174`. |
-| You want an empty database | Run `down`, then `docker volume rm wodoplon-dev_pgdata`, then `up -d`, and import OSM again. |
+| You want an empty database | Run `down`, then `docker volume rm wodoplon-dev_pgdata`, then `up -d`. The OSM import runs again by itself. |
 
 More cases are covered in [docs/setup.md](docs/setup.md#8-troubleshooting).
 
@@ -274,8 +290,8 @@ All results are computed at request time from open data. Nothing is precomputed 
 | Hydrography | OpenStreetMap via Geofabrik, Overpass as fallback | Rivers, streams, canals, ditches, lakes, wetlands | ODbL 1.0 |
 
 The map also uses some services only for display, never for the calculations: OSM tiles, Geoportal orthophoto, the
-KIEG cadastral WMS (also used to check land use), Copernicus EDO drought tiles, Overpass for nearby fields and
-ditches, and Open-Meteo elevation for runoff arrows.
+KIEG cadastral WMS (also used to check land use), Copernicus EDO drought tiles, OpenStreetMap ditches (from the OSM import
+through `/api/map/context`) and fields (Overpass), and Open-Meteo elevation for runoff arrows.
 
 Indices: `NDVI = (B08 − B04) / (B08 + B04)`, `NDWI = (B08 − B11) / (B08 + B11)` (Gao), crop evapotranspiration
 `ETc = ET₀ × Kc`.
@@ -284,7 +300,7 @@ Indices: `NDVI = (B08 − B04) / (B08 + B04)`, `NDWI = (B08 − B11) / (B08 + B1
 
 - SoilGrids has a 250 m grid and misses variation within a field. When it has no data, medium loam (130 mm/m
   available water) is assumed, and the report says so.
-- Long cloudy periods mean no usable Sentinel-2 scene. The assessment then relies on the other inputs and confidence
+- Long cloudy periods mean no usable Sentinel-2 scene in the 30 days before the analysis date. The assessment then relies on the other inputs and confidence
   goes down.
 - The Open-Meteo archive lags about five days behind and uses a 9–11 km grid. Dates inside that lag are flagged.
 - There is no groundwater or sensor data, and water-permit requirements are not checked.
