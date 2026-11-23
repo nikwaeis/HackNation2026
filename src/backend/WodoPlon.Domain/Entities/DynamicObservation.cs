@@ -11,7 +11,8 @@ namespace WodoPlon.Domain.Entities;
 public sealed class DynamicObservation
 {
     public const int HistoryYears = 10;
-    public const int SatelliteWindowDays = 15;
+    /// <summary> The geo-worker searches Sentinel-2 scenes from this many days before the target date up to it </summary>
+    public const int SatelliteWindowDays = 30;
 
     /// <summary> Database generated id </summary>
     public long Id { get; private set; }
@@ -126,8 +127,9 @@ public sealed class DynamicObservation
                 return ResultError.Validation(DomainErrorCodes.Entities.DynamicObservation.MissingSatelliteData);
             if (satellite.NdviMean is < -1 or > 1 || satellite.NdwiMean is < -1 or > 1)
                 return ResultError.Validation(DomainErrorCodes.Entities.DynamicObservation.IndexOutOfRange, -1, 1);
-            var shiftDays = Math.Abs(satellite.SceneDate.Value.DayNumber - TargetDate.DayNumber);
-            if (shiftDays > SatelliteWindowDays)
+            // a scene from after the target date would describe a later state of the field
+            var daysBefore = TargetDate.DayNumber - satellite.SceneDate.Value.DayNumber;
+            if (daysBefore is < 0 or > SatelliteWindowDays)
                 return ResultError.Validation(DomainErrorCodes.Entities.DynamicObservation.SceneOutOfWindow, SatelliteWindowDays);
         }
 

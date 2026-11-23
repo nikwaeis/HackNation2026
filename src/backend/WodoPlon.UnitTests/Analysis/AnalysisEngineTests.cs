@@ -75,6 +75,9 @@ public class AnalysisEngineTests
     [InlineData(-120, null, 0, null, null, 0, WaterDeficitLevel.High)] // no history → absolute fallback
     [InlineData(-95, null, 0, null, 74.0, 0, WaterDeficitLevel.High)]
     [InlineData(-10, null, 0, 0.1, null, 0, WaterDeficitLevel.Low)]
+    // rain covered the crop's need: no drought even 54 mm below a wetter-than-usual norm, with low NDWI
+    [InlineData(61.6, 115.4, 15, -0.18, 74.0, 6, WaterDeficitLevel.Low)]
+    [InlineData(0, 60.0, 0, null, null, 0, WaterDeficitLevel.Low)]
     public void Classify_Measures_Against_The_Local_Norm(double balance, double? median, int drySpell, double? ndwi,
         double? sand, int droughtYears, WaterDeficitLevel expected) =>
         WaterBalance.Classify((decimal)balance, (decimal?)median, drySpell, (decimal?)ndwi, (decimal?)sand, droughtYears)
@@ -130,6 +133,49 @@ public class AnalysisEngineTests
 
         advice.IsRecommended.Should().BeFalse();
         advice.AdvicePl.Should().Contain("maj, czerwiec");
+    }
+
+    [Theory]
+    [InlineData(3, WaterDeficitLevel.Critical, WaterDeficitLevel.Moderate)] // March: before the season
+    [InlineData(11, WaterDeficitLevel.High, WaterDeficitLevel.Moderate)]
+    [InlineData(1, WaterDeficitLevel.Low, WaterDeficitLevel.Low)]
+    [InlineData(4, WaterDeficitLevel.Critical, WaterDeficitLevel.Critical)] // April–October: unchanged
+    [InlineData(10, WaterDeficitLevel.High, WaterDeficitLevel.High)]
+    public void Risk_Is_Capped_Outside_The_Growing_Season(int month, WaterDeficitLevel level, WaterDeficitLevel expected) =>
+        WaterBalance.ForSeason(level, month).Should().Be(expected);
+
+    [Fact]
+    public void Low_Ndwi_Justifies_Irrigation_Only_While_The_Crop_Grows()
+    {
+        // July (outside wheat's critical May–June): severe canopy stress still justifies a dose
+        Recommendations.Irrigation(WaterDeficitLevel.High, Wheat, Target, -0.18m, 130m, _pl).IsRecommended.Should().BeTrue();
+
+        // November: low NDWI over a dormant field is not stress, no irrigation advice
+        var november = Recommendations.Irrigation(WaterDeficitLevel.High, Wheat, new DateOnly(2026, 11, 22), -0.18m, 130m, _pl);
+        november.IsRecommended.Should().BeFalse();
+        november.DoseMm.Should().BeNull();
+        november.AdvicePl.Should().Contain("maj, czerwiec");
+    }
+
+    [Fact]
+    public void Winter_Analysis_Says_It_Is_Outside_The_Season()
+    {
+        var november = new DateOnly(2026, 11, 22);
+        // Sep–Nov: 120 mm of rain against 60 mm of ET0 now, a much wetter window in the 10 past years
+        WeatherMonth[] window =
+        [
+            new(0, 9, 40m, 35m), new(0, 10, 45m, 18m), new(0, 11, 35m, 7m),
+            .. Enumerable.Range(1, 10).SelectMany(y => new WeatherMonth[] { new(y, 9, 60m, 35m), new(y, 10, 70m, 18m), new(y, 11, 60m, 7m) }),
+        ];
+        var observation = DynamicObservation.Create(ParcelId, november,
+            new MeteoData(35m, 120m, 190m, 60m, 15, window),
+            new SatelliteData(SatelliteStatus.Ok, 0.26m, -0.18m, november.AddDays(-7), 0m), FetchedAt).Value!;
+
+        var assessment = AnalysisEngine.Assess(SandyDitchSlope(), observation, Wheat, _pl);
+
+        assessment.RiskLevel.Should().Be(WaterDeficitLevel.Low);
+        assessment.Irrigation.IsRecommended.Should().BeFalse();
+        assessment.LimitationsPl[0].Should().StartWith("Data analizy wypada poza sezonem wegetacji");
     }
 
     [Theory]

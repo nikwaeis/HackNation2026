@@ -38,6 +38,9 @@ public static class ReportSources
     {
         var limitations = new List<string>();
 
+        if (!WaterBalance.InGrowingSeason(observation.TargetDate.Month))
+            limitations.Add(text["Report.Limitation.OutsideSeason"]);
+
         switch (observation.SatelliteStatus)
         {
             case SatelliteStatus.NoData:

@@ -113,7 +113,7 @@
         <value>Przy braku danych wartości satelitarne muszą być puste.</value>
     </data>
     <data name="Ent.DynamicObservation.SceneOutOfWindow" xml:space="preserve">
-        <value>Zdjęcie satelitarne musi pochodzić z okresu {0} dni od daty analizy.</value>
+        <value>Zdjęcie satelitarne musi pochodzić z {0} dni przed datą analizy.</value>
     </data>
     <data name="Ent.SavedReport.EmptyPayload" xml:space="preserve">
         <value>Treść raportu nie może być pusta.</value>
@@ -129,6 +129,15 @@
     </data>
     <data name="Analysis.LocationRequired" xml:space="preserve">
         <value>Podaj numer działki ewidencyjnej albo wskaż punkt na mapie.</value>
+    </data>
+    <data name="Map.BoxInvalid" xml:space="preserve">
+        <value>Podaj obszar mapy: south, west, north i east w stopniach, south mniejsze od north, west mniejsze od east.</value>
+    </data>
+    <data name="Map.BoxOutsidePoland" xml:space="preserve">
+        <value>Obszar mapy musi leżeć w Polsce.</value>
+    </data>
+    <data name="Map.BoxTooLarge" xml:space="preserve">
+        <value>Obszar mapy jest za duży: przybliż mapę (najwyżej 0,5° w każdym kierunku).</value>
     </data>
     <data name="Analysis.LatitudeOutOfRange" xml:space="preserve">
         <value>Szerokość geograficzna musi mieścić się w zakresie od -90 do 90.</value>
@@ -274,8 +283,11 @@
     <data name="Report.Source.OsmDated" xml:space="preserve">
         <value>OpenStreetMap (cieki, rowy i zbiorniki wodne, stan danych na {0:yyyy-MM-dd})</value>
     </data>
+    <data name="Report.Limitation.OutsideSeason" xml:space="preserve">
+        <value>Data analizy wypada poza sezonem wegetacji (kwiecień–październik): uprawa nie pobiera teraz wody, więc ocena mówi o zapasie wody w glebie przed wiosną, a nie o stresie roślin. Poziom ryzyka ograniczono do umiarkowanego.</value>
+    </data>
     <data name="Report.Limitation.SatelliteNoData" xml:space="preserve">
-        <value>Brak bezchmurnego zdjęcia Sentinel-2 w oknie ±15 dni: ocenę wykonano na podstawie danych meteorologicznych i glebowych, bez korekty satelitarnej.</value>
+        <value>Brak bezchmurnego zdjęcia Sentinel-2 z 30 dni przed datą analizy: ocenę wykonano na podstawie danych meteorologicznych i glebowych, bez korekty satelitarnej.</value>
     </data>
     <data name="Report.Limitation.SatelliteError" xml:space="preserve">
         <value>Usługa danych satelitarnych była chwilowo niedostępna: ocenę wykonano bez korekty satelitarnej, dane zostaną pobrane ponownie przy kolejnej analizie.</value>

@@ -113,7 +113,7 @@
         <value>Satellite values must be empty when there is no data.</value>
     </data>
     <data name="Ent.DynamicObservation.SceneOutOfWindow" xml:space="preserve">
-        <value>Satellite scene must be within {0} days of the analysis date.</value>
+        <value>Satellite scene must be from the {0} days before the analysis date.</value>
     </data>
     <data name="Ent.SavedReport.EmptyPayload" xml:space="preserve">
         <value>Report content cannot be empty.</value>
@@ -129,6 +129,15 @@
     </data>
     <data name="Analysis.LocationRequired" xml:space="preserve">
         <value>Provide a cadastral parcel id or pick a point on the map.</value>
+    </data>
+    <data name="Map.BoxInvalid" xml:space="preserve">
+        <value>Give the map area as south, west, north and east in degrees, with south below north and west below east.</value>
+    </data>
+    <data name="Map.BoxOutsidePoland" xml:space="preserve">
+        <value>The map area must be in Poland.</value>
+    </data>
+    <data name="Map.BoxTooLarge" xml:space="preserve">
+        <value>The map area is too large: zoom in (at most 0.5° each way).</value>
     </data>
     <data name="Analysis.LatitudeOutOfRange" xml:space="preserve">
         <value>Latitude must be between -90 and 90.</value>
@@ -274,8 +283,11 @@
     <data name="Report.Source.OsmDated" xml:space="preserve">
         <value>OpenStreetMap (rivers, ditches and water bodies, data as of {0:yyyy-MM-dd})</value>
     </data>
+    <data name="Report.Limitation.OutsideSeason" xml:space="preserve">
+        <value>The analysis date is outside the growing season (April–October): the crop is not taking up water now, so the assessment describes the soil water reserve before spring rather than plant stress. The risk level is capped at moderate.</value>
+    </data>
     <data name="Report.Limitation.SatelliteNoData" xml:space="preserve">
-        <value>No cloud-free Sentinel-2 scene within ±15 days: the assessment uses weather and soil data without satellite correction.</value>
+        <value>No cloud-free Sentinel-2 scene in the 30 days before the analysis date: the assessment uses weather and soil data without satellite correction.</value>
     </data>
     <data name="Report.Limitation.SatelliteError" xml:space="preserve">
         <value>The satellite data service was temporarily unavailable: the assessment has no satellite correction, the data will be fetched again on the next analysis.</value>

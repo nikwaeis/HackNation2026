@@ -91,14 +91,26 @@ public class EntityTests
         result.Errors.Single().Code.Should().Be(DomainErrorCodes.Entities.DynamicObservation.UnexpectedSatelliteData);
     }
 
-    [Fact]
-    public void Observation_Rejects_Scene_Outside_Window()
+    [Theory]
+    [InlineData(1)] // after the target date
+    [InlineData(16)]
+    [InlineData(-31)] // older than the geo-worker's 30-day search window
+    public void Observation_Rejects_Scene_Outside_Window(int shiftDays)
     {
         var result = DynamicObservation.Create(ParcelIdVo.Create(ValidParcelId).Value, Target, Meteo,
-            new SatelliteData(SatelliteStatus.Ok, 0.6m, 0.1m, Target.AddDays(16), 5m), DateTimeOffset.UtcNow);
+            new SatelliteData(SatelliteStatus.Ok, 0.6m, 0.1m, Target.AddDays(shiftDays), 5m), DateTimeOffset.UtcNow);
 
         result.Errors.Single().Code.Should().Be(DomainErrorCodes.Entities.DynamicObservation.SceneOutOfWindow);
     }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-16)] // used to be dropped by the old ±15-day check although the geo-worker searches 30 days back
+    [InlineData(-30)]
+    public void Observation_Accepts_Scene_From_The_30_Days_Before_The_Target(int shiftDays) =>
+        DynamicObservation.Create(ParcelIdVo.Create(ValidParcelId).Value, Target, Meteo,
+                new SatelliteData(SatelliteStatus.Ok, 0.6m, 0.1m, Target.AddDays(shiftDays), 5m), DateTimeOffset.UtcNow)
+            .IsSuccess.Should().BeTrue();
 
     [Fact]
     public void Observation_Computes_Water_Balance_And_Norm()

@@ -44,6 +44,16 @@ public class AnalyzeEndpointTests
         Errors(Valid with { TargetDate = DateOnly.Parse(date) }).Should().Equal(AnalysisErrorCodes.TargetDateOutOfRange);
 
     [Fact]
+    public void Today_Is_The_Polish_Calendar_Date()
+    {
+        // 23:30 UTC on 21 November is already 00:30 on 22 November in Poland (CET, UTC+1)
+        var justAfterMidnight = new AnalyzeParcelDtoValidator(new FixedTime(new DateTimeOffset(2026, 11, 21, 23, 30, 0, TimeSpan.Zero)));
+
+        justAfterMidnight.Validate(Valid with { TargetDate = new DateOnly(2026, 11, 22) }).IsValid.Should().BeTrue();
+        justAfterMidnight.Validate(Valid with { TargetDate = new DateOnly(2026, 11, 23) }).IsValid.Should().BeFalse();
+    }
+
+    [Fact]
     public void Missing_Crop_And_Date_Are_Rejected_Once_Each() =>
         Errors(Valid with { CropId = null, TargetDate = null })
             .Should().Equal(AnalysisErrorCodes.CropRequired, AnalysisErrorCodes.TargetDateOutOfRange);

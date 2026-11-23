@@ -62,10 +62,27 @@ public static class WaterBalance
         return PastBalances(months, crop).Count(b => b - median < DroughtYearAnomalyMm);
     }
 
+    /// <summary> Polish vegetation season (mean daily temperature above ~5 °C): April to October </summary>
+    public const int GrowingSeasonFirstMonth = 4;
+    public const int GrowingSeasonLastMonth = 10;
+
+    public static bool InGrowingSeason(int month) => month is >= GrowingSeasonFirstMonth and <= GrowingSeasonLastMonth;
+
+    /// <summary>
+    /// Outside the vegetation season crops do not draw water, so a drier-than-usual window means a smaller
+    /// soil water reserve for spring, not plant stress: the level is capped at MODERATE
+    /// </summary>
+    public static WaterDeficitLevel ForSeason(WaterDeficitLevel level, int month) =>
+        InGrowingSeason(month) || level <= WaterDeficitLevel.Moderate ? level : WaterDeficitLevel.Moderate;
+
     /// <param name="medianMm"> 10-year median balance; null falls back to absolute thresholds </param>
     public static WaterDeficitLevel Classify(decimal balanceMm, decimal? medianMm, int drySpellDays, decimal? ndwi,
         decimal? sandPct, int droughtYears)
     {
+        // rain covered the crop's need: a surplus is never a drought, even if it is smaller than usual here
+        if (balanceMm >= 0)
+            return WaterDeficitLevel.Low;
+
         if (balanceMm < CriticalBalanceMm && (drySpellDays >= CriticalDrySpellDays || ndwi < SevereStressNdwi))
             return WaterDeficitLevel.Critical;
 

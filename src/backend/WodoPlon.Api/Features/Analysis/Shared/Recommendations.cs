@@ -102,7 +102,10 @@ public static class Recommendations
         if (level is not (WaterDeficitLevel.High or WaterDeficitLevel.Critical))
             return new(false, text["Report.Irrigation.NotNeeded"], null);
 
-        if (!crop.IsCriticalMonth(targetDate.Month) && !(ndwi < WaterBalance.SevereStressNdwi))
+        // severe canopy stress justifies irrigation outside the critical months, but only while the crop grows:
+        // a low NDWI over a dormant winter field or bare soil is not water stress
+        bool severeStressInSeason = WaterBalance.InGrowingSeason(targetDate.Month) && ndwi < WaterBalance.SevereStressNdwi;
+        if (!crop.IsCriticalMonth(targetDate.Month) && !severeStressInSeason)
         {
             string months = string.Join(", ", crop.CriticalMonths.Select(text.Month));
             return new(false, text["Report.Irrigation.OutsideCriticalMonths", months], null);

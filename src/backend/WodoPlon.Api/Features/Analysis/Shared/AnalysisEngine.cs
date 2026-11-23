@@ -49,7 +49,9 @@ public static class AnalysisEngine
         int drySpell = observation.DrySpellDays ?? 0;
         decimal precip = observation.Precip90dMm ?? 0;
 
-        var level = WaterBalance.Classify(balance, median, drySpell, observation.NdwiMean, profile.SandPct?.Value, droughtYears);
+        var level = WaterBalance.ForSeason(
+            WaterBalance.Classify(balance, median, drySpell, observation.NdwiMean, profile.SandPct?.Value, droughtYears),
+            observation.TargetDate.Month);
         var (causes, retention) = Retention(profile, observation, text);
         string levelText = text[$"Report.Level.{level}"];
 
