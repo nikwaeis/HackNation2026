@@ -12,8 +12,13 @@ export default defineConfig(({ mode }) => {
       host: '0.0.0.0',
       port: 5173,
       strictPort: true,
-      // inotify events don't pass through Windows/macOS bind mounts into Docker
-      watch: env.VITE_USE_POLLING === 'true' ? { usePolling: true, interval: 300 } : undefined,
+      watch: {
+        // inotify events don't pass through Windows/macOS bind mounts into Docker
+        ...(env.VITE_USE_POLLING === 'true' ? { usePolling: true, interval: 300 } : {}),
+        // test output is not source: Playwright writes HTML traces there while a test runs, and Vite would reload
+        // the page under test for every new HTML file
+        ignored: ['**/e2e-results/**', '**/playwright-report/**', '**/test-results/**', '**/coverage/**'],
+      },
       proxy: {
         '/api': {
           target: apiTarget,

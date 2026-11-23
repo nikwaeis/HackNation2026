@@ -3,10 +3,13 @@ FROM node:22-alpine
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci || npm install
+# remember which lockfile node_modules was installed from (see CMD)
+RUN (npm ci || npm install) && cp package-lock.json node_modules/.installed-package-lock.json
 
 COPY . .
 
 EXPOSE 5173
 
-CMD ["npm", "run", "dev"]
+# docker-compose.dev.yml keeps node_modules in an anonymous volume, which survives image rebuilds: reinstall into it
+# when the bind-mounted package-lock.json no longer matches what was installed
+CMD ["sh", "-c", "cmp -s package-lock.json node_modules/.installed-package-lock.json || { echo 'package-lock.json changed: npm ci' && npm ci && cp package-lock.json node_modules/.installed-package-lock.json; }; exec npm run dev"]

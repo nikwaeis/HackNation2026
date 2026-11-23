@@ -1,10 +1,22 @@
 #!/bin/sh
 # Imports all Polish OSM water (rivers, streams, canals, ditches, drains, lakes, wetlands) into hydro_features,
-# so the API finds the nearest water locally in milliseconds instead of asking Overpass.
-# Run (dev):  docker compose -f docker-compose.dev.yml run --rm osm-import
-# Run (prod): docker compose -f docker-compose.prod.yml run --rm osm-import
-# Re-run monthly to refresh; it is idempotent (upsert by OSM id).
+# so the API finds nearby water and draws ditches locally in milliseconds instead of asking Overpass.
+#
+# `docker compose up` starts it automatically (OSM_IMPORT=auto): it waits for the database schema, then imports
+# unless the last import is younger than OSM_IMPORT_MAX_AGE_DAYS (30). The first run downloads ~2.1 GB.
+#   OSM_IMPORT=auto    import when missing or older than OSM_IMPORT_MAX_AGE_DAYS (compose default)
+#   OSM_IMPORT=always  import now (default when the script is run directly)
+#   OSM_IMPORT=off     do nothing (slow or metered connections; the API then asks Overpass per parcel)
+# Refresh by hand: docker compose -f docker-compose.dev.yml run --rm -e OSM_IMPORT=always osm-import
+# It is idempotent (upsert by OSM id).
 set -eu
+
+MODE="${OSM_IMPORT:-always}"
+MAX_AGE_DAYS="${OSM_IMPORT_MAX_AGE_DAYS:-30}"
+if [ "$MODE" = "off" ]; then
+  echo "OSM_IMPORT=off: skipping the OSM water import"
+  exit 0
+fi
 
 PBF_URL="${PBF_URL:-https://download.geofabrik.de/europe/poland-latest.osm.pbf}"
 PBF=/data/poland-latest.osm.pbf
@@ -13,6 +25,24 @@ if [ -n "${PGPASSWORD_FILE:-}" ]; then PGPASSWORD="$(cat "$PGPASSWORD_FILE")"; e
 PG="PG:host=${PGHOST} dbname=${PGDATABASE} user=${PGUSER} password=${PGPASSWORD}"
 
 sql() { ogrinfo -q "$PG" -sql "$1" > /dev/null; }
+
+# the API creates the tables (dev: migrations on startup; prod: applied by hand), so wait for them
+waited=0
+until ogrinfo -q "$PG" -sql "SELECT 1 FROM data_imports LIMIT 1" > /dev/null 2>&1; do
+  if [ "$waited" -ge 900 ]; then
+    echo "database tables not found after 15 minutes: apply the API migrations first (docs/setup.md)" >&2
+    exit 1
+  fi
+  [ "$waited" -eq 0 ] && echo "waiting for the database schema (API migrations)..."
+  sleep 10
+  waited=$((waited + 10))
+done
+
+if [ "$MODE" = "auto" ] && ogrinfo "$PG" -sql "SELECT name FROM data_imports WHERE name = 'osm_water'
+     AND imported_at > now() - interval '$MAX_AGE_DAYS days'" 2> /dev/null | grep -q "name (String) = osm_water"; then
+  echo "OSM water was imported in the last $MAX_AGE_DAYS days: nothing to do (OSM_IMPORT=always forces a refresh)"
+  exit 0
+fi
 
 echo "1/4 download (only if Geofabrik has a newer file)"
 # abort a stalled transfer instead of waiting forever

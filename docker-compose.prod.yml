@@ -61,15 +61,18 @@ services:
       dockerfile: Dockerfile.prod
     restart: unless-stopped
 
-  # Bulk OSM water for nearest-water lookups (run once before go-live, refresh monthly):
-  #   docker compose -f docker-compose.prod.yml run --rm osm-import
+  # Polish OSM water for nearest-water lookups and map ditches. Runs on every `up`, waits for the migrations, imports
+  # only when the data is missing or older than 30 days, then exits. OSM_IMPORT=off in .env.prod skips it.
+  # Refresh now: docker compose --env-file .env.prod -f docker-compose.prod.yml run --rm -e OSM_IMPORT=always osm-import
   osm-import:
     image: ghcr.io/osgeo/gdal:ubuntu-small-3.10.3
-    profiles: ["tools"]
     env_file: .env.prod
     environment:
       PGHOST: postgres
       PGPASSWORD_FILE: /run/secrets/db_password
+      OSM_IMPORT: ${OSM_IMPORT:-auto}
+      OSM_IMPORT_MAX_AGE_DAYS: ${OSM_IMPORT_MAX_AGE_DAYS:-30}
+    restart: "no"
     secrets:
       - db_password
     volumes:

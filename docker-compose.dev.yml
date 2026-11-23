@@ -54,25 +54,31 @@ services:
     build:
       context: ./src/python-service
       dockerfile: Dockerfile.dev
+    environment:
+      # uvicorn --reload: poll, file events don't pass through Windows/macOS bind mounts
+      WATCHFILES_FORCE_POLLING: "true"
     ports:
       - "${PYTHON_SERVICE_PORT:-8000}:8000"
     volumes:
       - ./src/python-service:/app
 
-  # Bulk OSM water for nearest-water lookups (run once, refresh monthly):
-  #   docker compose -f docker-compose.dev.yml run --rm osm-import
+  # Polish OSM water for nearest-water lookups and map ditches. Runs on every `up`, imports only when the data is
+  # missing or older than 30 days (first run: ~2.1 GB download, ~10 min), then exits. OSM_IMPORT=off in .env skips it.
+  # Refresh now: docker compose -f docker-compose.dev.yml run --rm -e OSM_IMPORT=always osm-import
   osm-import:
     image: ghcr.io/osgeo/gdal:ubuntu-small-3.10.3
-    profiles: ["tools"]
     environment:
       PGHOST: postgres
       PGDATABASE: ${POSTGRES_DB}
       PGUSER: ${POSTGRES_USER}
       PGPASSWORD: ${POSTGRES_PASSWORD}
+      OSM_IMPORT: ${OSM_IMPORT:-auto}
+      OSM_IMPORT_MAX_AGE_DAYS: ${OSM_IMPORT_MAX_AGE_DAYS:-30}
     volumes:
       - ./scripts:/scripts:ro
       - osm:/data
     entrypoint: ["sh", "/scripts/import-osm-water.sh"]
+    restart: "no"
     depends_on:
       postgres:
         condition: service_healthy
@@ -83,6 +89,8 @@ services:
       dockerfile: Dockerfile.dev
     environment:
       VITE_API_PROXY_TARGET: http://api:8080
+      # file events don't pass through Windows/macOS bind mounts, so Vite polls for changes
+      VITE_USE_POLLING: "true"
     ports:
       - "${FRONTEND_PORT:-5173}:5173"
     volumes:
