@@ -15,6 +15,7 @@ using WodoPlon.Api.Features.Analysis;
 using WodoPlon.Api.Features.Analysis.Shared;
 using WodoPlon.Api.Features.Crops;
 using WodoPlon.Api.Features.Health;
+using WodoPlon.Api.Features.Map;
 using WodoPlon.Api.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -132,5 +133,6 @@ var api = app.MapGroup("/api")
 api.MapHealth();
 api.MapCrops();
 api.MapAnalysis();
+api.MapMapContext();
 
 app.Run();

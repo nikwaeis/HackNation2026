@@ -48,6 +48,7 @@ import {
   type RunoffContext,
   type ViewContext,
   type WaterContext,
+  type WaterFeature,
 } from '../api/mapContext';
 import {
   LocalProjection,
@@ -426,9 +427,12 @@ function MapRef({ mapRef }: { mapRef: React.MutableRefObject<L.Map | null> }) {
 function ViewportContext({
   enabled,
   onChange,
+  onWater,
 }: {
   enabled: boolean;
   onChange: (ctx: ViewContext | null, status: ViewStatus) => void;
+  /** ditches of the new area, before its farmland has loaded */
+  onWater: (water: WaterFeature[]) => void;
 }) {
   const map = useMap();
   const timer = useRef<number | null>(null);
@@ -446,7 +450,13 @@ function ViewportContext({
       const c = new AbortController();
       ctrl.current = c;
       onChange(null, 'loading');
-      fetchViewContext({ south: b.getSouth(), west: b.getWest(), north: b.getNorth(), east: b.getEast() }, c.signal)
+      fetchViewContext(
+        { south: b.getSouth(), west: b.getWest(), north: b.getNorth(), east: b.getEast() },
+        c.signal,
+        (water) => {
+          if (!c.signal.aborted) onWater(water);
+        },
+      )
         .then((ctx) => {
           if (!c.signal.aborted) onChange(ctx, 'ready');
         })
@@ -623,6 +633,11 @@ export function ParcelMap({
   const fields = viewCtx?.fields ?? [];
 
   // keep the last good context while a new area loads, so overlays don't flicker on pan
+  // ditches arrive before the farmland: draw them at once and keep the fields shown so far until the new ones load
+  function handleViewWater(water: WaterFeature[]) {
+    setViewCtx((prev) => ({ water, fields: prev?.fields ?? [] }));
+  }
+
   function handleViewContext(ctx: ViewContext | null, status: ViewStatus) {
     setViewStatus(status);
     if (status === 'ready' || status === 'idle') {
@@ -961,7 +976,7 @@ export function ParcelMap({
           onNotice={showNotice}
           onViewChange={onViewChange}
         />
-        <ViewportContext enabled={showViewportWater} onChange={handleViewContext} />
+        <ViewportContext enabled={showViewportWater} onChange={handleViewContext} onWater={handleViewWater} />
         <DevMapHandle interactive={interactive} />
         <PolandClip />
         <MapRef mapRef={mapRef} />

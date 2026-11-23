@@ -8,6 +8,11 @@ import type { Language } from '../i18n/translations';
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 
+/** Absolute or proxied URL of a backend path such as `/api/map/context` */
+export function apiUrl(path: string): string {
+  return `${API_BASE}${path}`;
+}
+
 export class ApiError extends Error {
   status: number;
   isNetwork: boolean;

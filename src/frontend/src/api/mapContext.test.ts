@@ -101,11 +101,104 @@ describe('fetchViewContext (fields highlighted on the map + ditches)', () => {
     expect(pointInFields(52.009, 18.001, ctx.fields)).toBe(false);
   });
 
-  it('caches by snapped grid: a small pan does not query Overpass again', async () => {
+  it('caches by snapped grid: a small pan does not ask again', async () => {
     const { fn, calls } = overpass([]);
     vi.stubGlobal('fetch', fn);
     await fetchViewContext({ south: 51.501, west: 17.501, north: 51.509, east: 17.509 }, signal());
     await fetchViewContext({ south: 51.502, west: 17.502, north: 51.51, east: 17.51 }, signal());
+    // first the backend (not running in this test), then Overpass once
+    expect(calls.map((c) => new URL(c.url, 'http://app.local').pathname)).toEqual(['/api/map/context', '/api/interpreter']);
+  });
+});
+
+/** Backend `GET /api/map/context` plus Overpass mocks; Overpass answers with the given elements */
+function mapApi(body: unknown, overpassElements: unknown[] = [], status = 200) {
+  return routedFetch([
+    [(u) => u.startsWith('/api/map/context'), () => Response.json(body, { status })],
+    [(u) => u.includes('overpass-api.de'), () => Response.json({ elements: overpassElements })],
+  ]);
+}
+
+const overpassQuery = (init?: RequestInit) => new URLSearchParams(String(init?.body)).get('data') ?? '';
+
+describe('ditches from the backend OSM import, farmland from Overpass', () => {
+  const closed = [{ lat: 50, lon: 20 }, { lat: 50, lon: 20.01 }, { lat: 50.01, lon: 20.01 }, { lat: 50, lon: 20 }];
+
+  it('takes ditches from the backend and asks Overpass for farmland only', async () => {
+    const { fn, calls } = mapApi(
+      { water: [{ id: 5, kind: 'stream', name: 'Struga', line: [[50, 20], [50.01, 20]] }], waterSource: 'osm-import' },
+      [
+        { type: 'way', id: 6, tags: { landuse: 'farmland' }, geometry: closed },
+        { type: 'way', id: 7, tags: { waterway: 'ditch' }, geometry: [{ lat: 50, lon: 20 }, { lat: 50.01, lon: 20 }] },
+      ],
+    );
+    vi.stubGlobal('fetch', fn);
+
+    const ctx = await fetchViewContext({ south: 50.001, west: 20.001, north: 50.009, east: 20.009 }, signal());
+
+    expect(ctx.water).toEqual([{ id: 5, kind: 'stream', name: 'Struga', line: [[50, 20], [50.01, 20]] }]);
+    expect(ctx.fields.map((f) => f.id)).toEqual([6]);
+    const q = new URL(calls[0].url, 'http://app.local').searchParams;
+    expect([q.get('south'), q.get('west'), q.get('north'), q.get('east')]).toEqual(['50.00000', '20.00000', '50.02000', '20.02000']);
+    expect(overpassQuery(calls[1].init)).toContain('landuse');
+    expect(overpassQuery(calls[1].init)).not.toContain('waterway');
+  });
+
+  it('hands the ditches over before farmland, and keeps them when Overpass fails', async () => {
+    const { fn } = routedFetch([
+      [(u) => u.startsWith('/api/map/context'), () => Response.json({ water: [{ id: 11, kind: 'ditch', name: null, line: [[50.3, 20.3], [50.31, 20.3]] }], waterSource: 'osm-import' })],
+      [(u) => u.includes('overpass-api.de'), () => new Response('busy', { status: 504 })],
+    ]);
+    vi.stubGlobal('fetch', fn);
+    const early: number[] = [];
+
+    await expect(
+      fetchViewContext({ south: 50.301, west: 20.301, north: 50.309, east: 20.309 }, signal(), (w) => early.push(...w.map((x) => x.id))),
+    ).rejects.toThrow();
+    expect(early).toEqual([11]);
+  });
+
+  it('without an import the browser asks Overpass for waterways too', async () => {
+    const { fn, calls } = mapApi({ water: [], waterSource: null }, [
+      { type: 'way', id: 8, tags: { waterway: 'ditch' }, geometry: [{ lat: 50.1, lon: 20.1 }, { lat: 50.11, lon: 20.1 }] },
+    ]);
+    vi.stubGlobal('fetch', fn);
+
+    const ctx = await fetchViewContext({ south: 50.101, west: 20.101, north: 50.109, east: 20.109 }, signal());
+
+    expect(ctx.water.map((w) => w.id)).toEqual([8]);
+    expect(overpassQuery(calls[1].init)).toContain('waterway');
+  });
+
+  it('rate limits are not bypassed by asking Overpass directly', async () => {
+    const { fn, calls } = mapApi({ title: 'Too many requests' }, [], 429);
+    vi.stubGlobal('fetch', fn);
+    await expect(fetchViewContext({ south: 50.201, west: 20.201, north: 50.209, east: 20.209 }, signal())).rejects.toThrow();
     expect(calls).toHaveLength(1);
+  });
+
+  it('water around a parcel comes from the import alone and measures the nearest ditch', async () => {
+    const { fn, calls } = mapApi({
+      water: [{ id: 9, kind: 'ditch', name: null, line: [[49.99, 21.0055], [50.01, 21.0055]] }],
+      waterSource: 'osm-import',
+    });
+    vi.stubGlobal('fetch', fn);
+
+    const ctx = await fetchWaterContext(parcelAt(21.0, 50.0), signal());
+
+    expect(ctx.nearest!.feature.id).toBe(9);
+    expect(calls).toHaveLength(1); // no Overpass request
+  });
+
+  it('water around a parcel falls back to Overpass before the import has run', async () => {
+    const { fn, calls } = mapApi({ water: [], waterSource: null }, [
+      { type: 'way', id: 10, tags: { waterway: 'drain' }, geometry: [{ lat: 50.09, lon: 21.1055 }, { lat: 50.11, lon: 21.1055 }] },
+    ]);
+    vi.stubGlobal('fetch', fn);
+
+    const ctx = await fetchWaterContext(parcelAt(21.1, 50.1), signal());
+
+    expect(ctx.nearest!.feature.id).toBe(10);
+    expect(calls.map((c) => c.url.includes('overpass-api.de'))).toEqual([false, true]);
   });
 });

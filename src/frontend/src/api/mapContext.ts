@@ -1,16 +1,20 @@
 import type { ParcelGeometry } from '../types/api';
 import { LocalProjection, bboxOf, nearestBetween, type Bbox, type LatLon, type NearestLink } from '../lib/geo';
+import { apiUrl } from './client';
 
 /*
  * Visual map context around the highlighted parcel (purely decorative — the analysis itself is unchanged):
- *  - ditches / streams from OpenStreetMap (Overpass API, same open source the backend uses),
+ *  - ditches / streams from OpenStreetMap: from the backend's local OSM import (`GET /api/map/context`) when it
+ *    exists, otherwise from the public Overpass API;
+ *  - farmland that can be picked, from the public Overpass API (CORS-enabled, key-less);
  *  - downslope direction from a plane fitted to elevation samples (Open-Meteo Elevation API, Copernicus DEM 90 m).
- * Both are public, key-less and CORS-enabled; failures are silent and simply hide the overlay.
+ * Failures are silent and simply hide the overlay.
  */
 
 const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
 const ELEVATION_URL = 'https://api.open-meteo.com/v1/elevation';
 const TIMEOUT_MS = 15_000;
+/** The public Overpass instance can be slow under load: the viewport query gets more time */
 const VIEW_TIMEOUT_MS = 30_000;
 /** How far around the parcel to look for water features */
 const WATER_SEARCH_M = 700;
@@ -93,6 +97,44 @@ export interface ViewContext {
 
 const FIELD_LANDUSE = '^(farmland|meadow|orchard|vineyard|plant_nursery)$';
 
+/** `GET /api/map/context` answer; points are [lat, lon] */
+interface ApiMapWater {
+  water: { id: number; kind: string; name: string | null; line: LatLon[] }[];
+  /** 'osm-import'; null when the backend has no OSM import yet */
+  waterSource: string | null;
+}
+
+/**
+ * Ditches and streams from the backend's local OSM import. Null means the browser has to ask Overpass for them
+ * itself: no backend (frontend-only mode), or no import yet. Rate limits and validation errors are thrown.
+ */
+async function fetchWaterFromApi(box: Bbox, signal: AbortSignal): Promise<WaterFeature[] | null> {
+  const params = new URLSearchParams({
+    south: box.south.toFixed(5),
+    west: box.west.toFixed(5),
+    north: box.north.toFixed(5),
+    east: box.east.toFixed(5),
+  });
+
+  const t = withTimeout(signal);
+  try {
+    let res: Response;
+    try {
+      res = await fetch(apiUrl(`/api/map/context?${params}`), { signal: t.signal });
+    } catch (err) {
+      if (t.signal.aborted) throw err; // cancelled by the map or timed out
+      return null; // network error: no backend
+    }
+    if (res.status === 400 || res.status === 429) throw new Error(`Map context ${res.status}`);
+    if (!res.ok) return null; // 404 / 5xx: missing or unreachable backend
+    const body = (await res.json()) as ApiMapWater;
+    if (!body.waterSource) return null;
+    return body.water.map((w) => ({ id: w.id, kind: toKind(w.kind), name: w.name, line: w.line }));
+  } finally {
+    t.done();
+  }
+}
+
 async function queryWaterways(box: Bbox, limit: number, signal: AbortSignal): Promise<WaterFeature[]> {
   const bbox = [box.south, box.west, box.north, box.east].map((v) => v.toFixed(6)).join(',');
   const query = `[out:json][timeout:15];way["waterway"~"^(ditch|drain|canal|stream|river)$"](${bbox});out geom ${limit};`;
@@ -133,7 +175,12 @@ function isClosed(line: { lat: number; lon: number }[]): boolean {
  * Ditches / streams and agricultural land for the visible map area.
  * The box is snapped to a grid so small pans reuse the cached result.
  */
-export async function fetchViewContext(view: Bbox, signal: AbortSignal): Promise<ViewContext> {
+export async function fetchViewContext(
+  view: Bbox,
+  signal: AbortSignal,
+  /** called as soon as the ditches are known, before the farmland */
+  onWater?: (water: WaterFeature[]) => void,
+): Promise<ViewContext> {
   const snap = (v: number, up: boolean) => (up ? Math.ceil(v / VIEW_CELL_DEG) : Math.floor(v / VIEW_CELL_DEG)) * VIEW_CELL_DEG;
   const box: Bbox = {
     south: snap(view.south, false),
@@ -145,9 +192,22 @@ export async function fetchViewContext(view: Bbox, signal: AbortSignal): Promise
   const cached = viewCache.get(key);
   if (cached) return cached;
 
+  // water from the backend's OSM import when it has one (handed over at once, so ditches show even if Overpass is
+  // slow or down); farmland always from Overpass, then with a lighter query
+  const water = await fetchWaterFromApi(box, signal);
+  if (water) onWater?.(water);
+  const fromOverpass = await queryViewFromOverpass(box, water === null, signal);
+  const result = { water: water ?? fromOverpass.water, fields: fromOverpass.fields };
+  viewCache.set(key, result);
+  return result;
+}
+
+/** The browser asks the public Overpass instance for farmland, and for waterways when the backend has none */
+async function queryViewFromOverpass(box: Bbox, withWater: boolean, signal: AbortSignal): Promise<ViewContext> {
   const bbox = [box.south, box.west, box.north, box.east].map((v) => v.toFixed(6)).join(',');
   // ways only: multipolygon relations are costly for the public server and rare for single fields
-  const query = `[out:json][timeout:25];(way["waterway"~"^(ditch|drain|canal|stream|river)$"](${bbox});way["landuse"~"${FIELD_LANDUSE}"](${bbox}););out geom 6000;`;
+  const waterways = withWater ? `way["waterway"~"^(ditch|drain|canal|stream|river)$"](${bbox});` : '';
+  const query = `[out:json][timeout:25];(${waterways}way["landuse"~"${FIELD_LANDUSE}"](${bbox}););out geom 6000;`;
 
   // the public Overpass instance can be slow under load — give the viewport query more time
   const t = withTimeout(signal, VIEW_TIMEOUT_MS);
@@ -181,9 +241,7 @@ export async function fetchViewContext(view: Bbox, signal: AbortSignal): Promise
       }
     }
 
-    const result = { water, fields };
-    viewCache.set(key, result);
-    return result;
+    return { water, fields };
   } finally {
     t.done();
   }
@@ -211,11 +269,8 @@ export async function fetchWaterContext(geometry: ParcelGeometry, signal: AbortS
   const b = bboxOf(geometry);
   const dLat = WATER_SEARCH_M / 110_540;
   const dLon = WATER_SEARCH_M / (111_320 * Math.cos((((b.south + b.north) / 2) * Math.PI) / 180));
-  const features = await queryWaterways(
-    { south: b.south - dLat, west: b.west - dLon, north: b.north + dLat, east: b.east + dLon },
-    120,
-    signal,
-  );
+  const box = { south: b.south - dLat, west: b.west - dLon, north: b.north + dLat, east: b.east + dLon };
+  const features = (await fetchWaterFromApi(box, signal)) ?? (await queryWaterways(box, 120, signal));
   {
     const proj = LocalProjection.forBbox(b);
     let nearest: WaterContext['nearest'] = null;
